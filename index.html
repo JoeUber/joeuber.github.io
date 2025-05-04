@@ -18,7 +18,7 @@
   <script type="text/babel">
     const roles = ['Proclaimer (First Reader)', 'Proclaimer (Second Reader)', 'Sacristan', 'Eucharistic Minister'];
     const masses = ['5pm Saturday Mass', '9am Sunday Mass', '11am Sunday Mass'];
-    const scriptURL = 'https://script.google.com/macros/s/AKfycbyLRwB-iapOUm4Yi5iCOOjnF6aDC6P3WfQwasFAf8LW9yAuy8sp9y0jtu5TSwVUb0XL7Q/exec';
+    const scriptURL = 'https://script.google.com/macros/s/AKfycbxOdeMxrmmy5NQ29XnYdqtzgBBgxfHL-u0upcLV5yNdocxwSXWQRZqcKO8zJoQDpqlCwg/exec';
 
     function App() {
       const [schedule, setSchedule] = React.useState([]);
@@ -39,7 +39,20 @@
           return;
         }
         console.log('CDNs loaded, testing backend connection...');
+
+        // Timeout to ensure loading state doesn't persist indefinitely
+        const timeout = setTimeout(() => {
+          if (!isLoaded) {
+            console.log('Backend connection timed out');
+            setError('Backend connection timed out. Please check the Google Apps Script URL and deployment settings.');
+            setConnectionStatus('Connection timed out');
+            setIsBackendConnected(false);
+            setIsLoaded(true);
+          }
+        }, 10000); // 10 seconds timeout
+
         testConnection();
+        return () => clearTimeout(timeout);
       }, []);
 
       const testConnection = () => {
@@ -74,6 +87,10 @@
           setError('Error connecting to backend: ' + err.message);
           setConnectionStatus('Connection error: ' + err.message);
           setIsBackendConnected(false);
+        })
+        .finally(() => {
+          console.log('Fetch completed, ensuring UI update with isLoaded:', isLoaded);
+          if (!isLoaded) setIsLoaded(true); // Force UI update
         });
       };
 
@@ -212,6 +229,7 @@
         });
       };
 
+      console.log('Rendering UI, isLoaded:', isLoaded);
       if (!isLoaded) {
         return <div className="text-center text-xl">Loading Church Scheduler...</div>;
       }
