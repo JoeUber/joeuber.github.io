@@ -9,26 +9,57 @@
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.15/babel.min.js" onerror="this.onerror=null; this.src='https://unpkg.com/@babel/standalone@7.20.15/babel.min.js'; console.error('Failed to load Babel from cdn.jsdelivr.net, trying unpkg.com')"></script>
   <script src="https://cdn.tailwindcss.com" onerror="console.error('Failed to load Tailwind CSS from cdn.tailwindcss.com')"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" onerror="console.error('Failed to load XLSX from cdn.jsdelivr.net'); document.getElementById('root').innerHTML = '<div class=\"text-center text-red-500\">Failed to load XLSX library. Please check your internet connection and try again.</div>'"></script>
+  <style>
+    .hover-scale {
+      transition: transform 0.2s ease-in-out;
+    }
+    .hover-scale:hover {
+      transform: scale(1.02);
+    }
+  </style>
 </head>
-<body>
-  <div id="root" class="container mx-auto p-4">
-    <div class="text-center text-xl">Loading Church Scheduler...</div>
+<body class="bg-gray-100">
+  <div id="root" class="container mx-auto p-6 max-w-4xl">
+    <div class="text-center text-xl text-gray-600">Loading Church Scheduler...</div>
   </div>
 
   <script type="text/babel">
-    const roles = ['Proclaimer (First Reader)', 'Proclaimer (Second Reader)', 'Sacristan', 'Eucharistic Minister'];
-    const masses = ['5pm Saturday Mass', '9am Sunday Mass', '11am Sunday Mass'];
+    const roles = [
+      'Sacristan',
+      'Proclaimer (First Reader)',
+      'Proclaimer (Second Reader)',
+      'Eucharistic Minister',
+      'Altar Server',
+      'Usher',
+      'Offertory Family'
+    ];
+    const masses = [
+      '5:00 PM Saturday Mass',
+      '9:00 AM Sunday Mass',
+      '11:00 AM Sunday Mass'
+    ];
     const scriptURL = 'https://script.google.com/macros/s/AKfycbxOdeMxrmmy5NQ29XnYdqtzgBBgxfHL-u0upcLV5yNdocxwSXWQRZqcKO8zJoQDpqlCwg/exec';
+    const COORDINATOR_PASSWORD = 'coord123'; // Hardcoded coordinator password
+    const ADMIN_PASSWORD = 'stpaulsdev3'; // Hardcoded admin password
 
     function App() {
-      const [schedule, setSchedule] = React.useState([]);
+      const [userRole, setUserRole] = React.useState(null); // null, 'volunteer', 'coordinator', 'admin'
+      const [passwordInput, setPasswordInput] = React.useState('');
+      const [showLogin, setShowLogin] = React.useState(false);
+      const [loginRole, setLoginRole] = React.useState(''); // 'coordinator' or 'admin'
+      const [monthlySchedules, setMonthlySchedules] = React.useState({});
+      const [volunteerLists, setVolunteerLists] = React.useState({});
       const [volunteers, setVolunteers] = React.useState([]);
+      const [filteredVolunteers, setFilteredVolunteers] = React.useState([]);
       const [file, setFile] = React.useState(null);
+      const [uploadSheet, setUploadSheet] = React.useState('');
+      const [sheetNames, setSheetNames] = React.useState([]);
       const [absence, setAbsence] = React.useState({ volunteer: '', role: '', mass: '' });
       const [error, setError] = React.useState(null);
       const [connectionStatus, setConnectionStatus] = React.useState('Not tested');
       const [isBackendConnected, setIsBackendConnected] = React.useState(false);
       const [isLoaded, setIsLoaded] = React.useState(false);
+      const [selectedDate, setSelectedDate] = React.useState('2025-05-03');
 
       React.useEffect(() => {
         console.log('App mounted, checking CDNs...');
@@ -56,21 +87,50 @@
           setIsLoaded(true);
           return;
         }
-        console.log('CDNs loaded, testing backend connection...');
-
-        const timeout = setTimeout(() => {
-          console.log('Backend connection timed out, forcing UI update');
-          setError('Backend connection timed out. Please check the Google Apps Script URL and deployment settings.');
-          setConnectionStatus('Connection timed out');
-          setIsBackendConnected(false);
-          setIsLoaded(true);
-        }, 10000);
-
-        testConnection();
-        return () => clearTimeout(timeout);
+        console.log('CDNs loaded, setting isLoaded to true');
+        setIsLoaded(true);
       }, []);
 
+      const handleRoleSelection = (role) => {
+        console.log('Role selected:', role);
+        if (role === 'volunteer') {
+          setUserRole('volunteer');
+          setShowLogin(false);
+        } else {
+          setLoginRole(role);
+          setShowLogin(true);
+        }
+      };
+
+      const handleLogin = () => {
+        console.log('Attempting login for role:', loginRole, 'with password:', passwordInput);
+        const correctPassword = loginRole === 'coordinator' ? COORDINATOR_PASSWORD : ADMIN_PASSWORD;
+        if (passwordInput === correctPassword) {
+          console.log('Password correct, setting userRole to:', loginRole);
+          setUserRole(loginRole);
+          setShowLogin(false);
+          setPasswordInput('');
+          setError(null);
+          if (loginRole === 'admin') {
+            testConnection();
+          }
+        } else {
+          console.log('Password incorrect');
+          setError('Incorrect password. Please try again.');
+        }
+      };
+
+      const handleLogout = () => {
+        console.log('Logging out, resetting userRole');
+        setUserRole(null);
+        setConnectionStatus('Not tested');
+        setIsBackendConnected(false);
+        setShowLogin(false);
+        setPasswordInput('');
+      };
+
       const testConnection = () => {
+        if (userRole !== 'admin') return;
         setConnectionStatus('Testing...');
         console.log('Sending test request to:', scriptURL);
         fetch(scriptURL, {
@@ -96,65 +156,388 @@
           }
         })
         .catch(err => {
-          console.error('Fetch error:', err.message);
+          console.error('Fetch error details:', err);
           setError('Error connecting to backend: ' + err.message);
           setConnectionStatus('Connection error: ' + err.message);
           setIsBackendConnected(false);
-        })
-        .finally(() => {
-          console.log('Fetch completed, setting isLoaded to true');
-          setIsLoaded(true);
         });
       };
 
       const handleFileChange = (event) => {
-        console.log('File selected:', event.target.files[0]?.name);
-        setFile(event.target.files[0]);
+        const selectedFile = event.target.files[0];
+        console.log('File selected:', selectedFile ? selectedFile.name : 'No file selected');
+        setFile(selectedFile || null);
+
+        if (selectedFile) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const data = new Uint8Array(e.target.result);
+              const workbook = XLSX.read(data, { type: 'array' });
+              setSheetNames(workbook.SheetNames);
+              setUploadSheet(workbook.SheetNames[0] || '');
+            } catch (err) {
+              console.error('Error reading sheet names:', err);
+              setError('Error reading sheet names: ' + err.message);
+            }
+          };
+          reader.readAsArrayBuffer(selectedFile);
+        }
       };
 
       const handleFileUpload = () => {
+        if (userRole !== 'coordinator' && userRole !== 'admin') return;
         if (!file) {
+          console.log('No file selected for upload');
           setError('Please select a file to upload.');
           return;
         }
-        console.log('Handling file upload for:', file.name);
+        if (!uploadSheet) {
+          console.log('No sheet selected for upload');
+          setError('Please select a sheet to upload.');
+          return;
+        }
+        console.log('Handling file upload for:', file.name, 'Sheet:', uploadSheet);
+
         try {
           const reader = new FileReader();
           reader.onload = (e) => {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            const json = XLSX.utils.sheet_to_json(worksheet);
-            console.log('Parsed Excel data:', json);
-            const parsedSchedule = json.map(row => ({
-              name: row.Name,
-              email: row.Email,
-              phone: row.Phone,
-              role: row.Role,
-              mass: row.Mass,
-              date: row.Date
-            }));
-            setSchedule(parsedSchedule);
-            const uniqueVolunteers = [...new Set(parsedSchedule.map(item => item.name))].map(name => ({
-              name,
-              email: parsedSchedule.find(item => item.name === name).email,
-              phone: parsedSchedule.find(item => item.name === name).phone
-            }));
-            setVolunteers(uniqueVolunteers);
-            console.log('Schedule updated:', parsedSchedule);
-            console.log('Volunteers updated:', uniqueVolunteers);
-            if (isBackendConnected) {
-              exportToGoogleSheets(json);
-            } else {
-              setError('Cannot save to Google Sheets: Backend not connected');
+            try {
+              const data = new Uint8Array(e.target.result);
+              const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+              const worksheet = workbook.Sheets[uploadSheet];
+              if (!worksheet) {
+                throw new Error(`Sheet "${uploadSheet}" not found in the workbook.`);
+              }
+
+              const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', raw: false, dateNF: 'm/d/yyyy' });
+
+              console.log(`Raw Excel data for sheet "${uploadSheet}":`, json);
+
+              const parsedSchedule = [];
+              const volunteerSet = new Set();
+              const newVolunteerLists = {};
+              let uploadMonth = '';
+
+              const monthMap = {
+                'jan': '2025-01', 'feb': '2025-02', 'mar': '2025-03', 'apr': '2025-04',
+                'may': '2025-05', 'jun': '2025-06', 'jul': '2025-07', 'aug': '2025-08',
+                'sep': '2025-09', 'oct': '2025-10', 'nov': '2025-11', 'dec': '2025-12'
+              };
+              const sheetNameLower = uploadSheet.toLowerCase();
+              for (const [key, value] of Object.entries(monthMap)) {
+                if (sheetNameLower.includes(key)) {
+                  uploadMonth = value;
+                  break;
+                }
+              }
+              if (!uploadMonth) {
+                setError(`Could not determine month from sheet name "${uploadSheet}". Please rename the sheet to include the month (e.g., "May").`);
+                return;
+              }
+              console.log(`Inferred month from sheet name: ${uploadMonth}`);
+
+              let headerRowIndex = -1;
+              const headerKeywords = ['TIME & DATE', 'SACRISTAN', 'PROCLAIMERS', 'EOMoHC', 'ALTAR SERVERS', 'USHERS', 'OFFERTORY FAMILY'];
+              for (let rowIndex = 0; rowIndex < json.length; rowIndex++) {
+                const row = json[rowIndex];
+                if (row.some(cell => headerKeywords.includes(String(cell).toUpperCase()))) {
+                  headerRowIndex = rowIndex;
+                  break;
+                }
+              }
+
+              if (headerRowIndex === -1) {
+                setError('Header row not found in the sheet. Please ensure the sheet has headers like "TIME & DATE", "SACRISTAN", etc.');
+                return;
+              }
+
+              const headers = json[headerRowIndex];
+              const columnMap = {};
+              headers.forEach((header, colIndex) => {
+                const headerStr = String(header).toUpperCase();
+                if (headerStr === 'TIME & DATE') columnMap['time_date'] = colIndex;
+                if (headerStr === 'NOTES') columnMap['notes'] = colIndex;
+                if (headerStr === 'SACRISTAN') columnMap['sacristan'] = colIndex;
+                if (headerStr === 'PROCLAIMERS') columnMap['proclaimers'] = colIndex;
+                if (headerStr === 'EOMoHC') columnMap['eomohc'] = colIndex;
+                if (headerStr === 'ALTAR SERVERS') columnMap['altar_servers'] = colIndex;
+                if (headerStr === 'USHERS') columnMap['ushers'] = colIndex;
+                if (headerStr === 'OFFERTORY FAMILY') columnMap['offertory_family'] = colIndex;
+                if (headerStr === 'SPECIAL MASS NOTES') columnMap['special_mass_notes'] = colIndex;
+              });
+
+              if (!('time_date' in columnMap)) {
+                setError('Required "TIME & DATE" column not found in the sheet.');
+                return;
+              }
+
+              console.log('Column mapping:', columnMap);
+
+              let currentMass = null;
+              let currentDate = null;
+              let currentNotes = '';
+              let currentSpecialMassNotes = '';
+
+              for (let rowIndex = headerRowIndex + 1; rowIndex < json.length; rowIndex++) {
+                const row = json[rowIndex];
+                if (!row[columnMap['time_date']]) continue;
+
+                const timeDateCell = String(row[columnMap['time_date']]);
+                let mass, date;
+
+                const timeDateLines = timeDateCell.split('\n').map(line => line.trim());
+                let dayOfWeek = '';
+                let dayMonth = '';
+                let time = '';
+
+                for (const line of timeDateLines) {
+                  if (/(Saturday|Sunday)/i.test(line)) {
+                    dayOfWeek = line.match(/(Saturday|Sunday)/i)[0];
+                  } else if (/\d+-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i.test(line)) {
+                    dayMonth = line;
+                  } else if (/(5:00\s*(?:PM|AM)|9:00\s*(?:PM|AM)|11:00\s*(?:PM|AM))/i.test(line)) {
+                    time = line.match(/(5:00\s*(?:PM|AM)|9:00\s*(?:PM|AM)|11:00\s*(?:PM|AM))/i)[0];
+                  }
+                }
+
+                if (!dayOfWeek || !dayMonth || !time) {
+                  for (let colIndex = 0; colIndex < row.length; colIndex++) {
+                    const cell = String(row[colIndex] || '');
+                    if (!dayOfWeek && /(Saturday|Sunday)/i.test(cell)) {
+                      dayOfWeek = cell.match(/(Saturday|Sunday)/i)[0];
+                    }
+                    if (!dayMonth && /\d+-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i.test(cell)) {
+                      dayMonth = cell;
+                    }
+                    if (!time && /(5:00\s*(?:PM|AM)|9:00\s*(?:PM|AM)|11:00\s*(?:PM|AM))/i.test(cell)) {
+                      time = cell.match(/(5:00\s*(?:PM|AM)|9:00\s*(?:PM|AM)|11:00\s*(?:PM|AM))/i)[0];
+                    }
+                  }
+                }
+
+                if (dayOfWeek && dayMonth && time) {
+                  const dayNum = dayMonth.match(/\d+/)[0];
+                  const monthAbbr = dayMonth.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i)[0];
+                  const monthMap = {
+                    'Jan': 'January', 'Feb': 'February', 'Mar': 'March', 'Apr': 'April', 'May': 'May', 'Jun': 'June',
+                    'Jul': 'July', 'Aug': 'August', 'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
+                  };
+                  const month = monthMap[monthAbbr];
+                  date = `${month} ${dayNum}, 2025`;
+                  mass = `${time} ${dayOfWeek} Mass`;
+                } else {
+                  console.log(`Skipping row ${rowIndex + 1}: Incomplete date components - ${timeDateCell}`);
+                  continue;
+                }
+
+                currentMass = mass;
+                currentDate = date;
+                currentNotes = columnMap['notes'] !== undefined ? String(row[columnMap['notes']] || '') : '';
+                currentSpecialMassNotes = columnMap['special_mass_notes'] !== undefined ? String(row[columnMap['special_mass_notes']] || '') : '';
+
+                if (!newVolunteerLists[mass]) {
+                  newVolunteerLists[mass] = {};
+                  roles.forEach(role => {
+                    newVolunteerLists[mass][role] = [];
+                  });
+                }
+
+                const excludeNames = /Fr\. Thomas|Deacon/i;
+
+                if (columnMap['sacristan'] !== undefined && row[columnMap['sacristan']]) {
+                  const name = String(row[columnMap['sacristan']]).trim();
+                  if (name && !excludeNames.test(name)) {
+                    parsedSchedule.push({
+                      name: name,
+                      email: '',
+                      phone: '',
+                      role: 'Sacristan',
+                      mass: mass,
+                      date: date,
+                      notes: currentNotes,
+                      specialMassNotes: currentSpecialMassNotes
+                    });
+                    volunteerSet.add(name);
+                    newVolunteerLists[mass]['Sacristan'].push(name);
+                  }
+                }
+
+                if (columnMap['proclaimers'] !== undefined && row[columnMap['proclaimers']]) {
+                  const proclaimers = String(row[columnMap['proclaimers']]).split('\n');
+                  const firstReaderMatch = proclaimers.find(line => /first\s*reader/i.test(line));
+                  const secondReaderMatch = proclaimers.find(line => /second\s*reader/i.test(line));
+                  if (firstReaderMatch) {
+                    const name = firstReaderMatch.replace(/first\s*reader\s*:\s*/i, '').trim();
+                    if (name && !excludeNames.test(name)) {
+                      parsedSchedule.push({
+                        name: name,
+                        email: '',
+                        phone: '',
+                        role: 'Proclaimer (First Reader)',
+                        mass: mass,
+                        date: date,
+                        notes: currentNotes,
+                        specialMassNotes: currentSpecialMassNotes
+                      });
+                      volunteerSet.add(name);
+                      newVolunteerLists[mass]['Proclaimer (First Reader)'].push(name);
+                    }
+                  }
+                  if (secondReaderMatch) {
+                    const name = secondReaderMatch.replace(/second\s*reader\s*:\s*/i, '').trim();
+                    if (name && !excludeNames.test(name)) {
+                      parsedSchedule.push({
+                        name: name,
+                        email: '',
+                        phone: '',
+                        role: 'Proclaimer (Second Reader)',
+                        mass: mass,
+                        date: date,
+                        notes: currentNotes,
+                        specialMassNotes: currentSpecialMassNotes
+                      });
+                      volunteerSet.add(name);
+                      newVolunteerLists[mass]['Proclaimer (Second Reader)'].push(name);
+                    }
+                  }
+                }
+
+                if (columnMap['eomohc'] !== undefined && row[columnMap['eomohc']]) {
+                  const eomohc = String(row[columnMap['eomohc']]).split('\n').filter(name => name.trim());
+                  eomohc.forEach(name => {
+                    if (name && !excludeNames.test(name)) {
+                      parsedSchedule.push({
+                        name: name.trim(),
+                        email: '',
+                        phone: '',
+                        role: 'Eucharistic Minister',
+                        mass: mass,
+                        date: date,
+                        notes: currentNotes,
+                        specialMassNotes: currentSpecialMassNotes
+                      });
+                      volunteerSet.add(name.trim());
+                      newVolunteerLists[mass]['Eucharistic Minister'].push(name.trim());
+                    }
+                  });
+                }
+
+                if (columnMap['altar_servers'] !== undefined && row[columnMap['altar_servers']]) {
+                  const altarServers = String(row[columnMap['altar_servers']]).split('\n').filter(name => name.trim());
+                  altarServers.forEach(name => {
+                    if (name && !excludeNames.test(name)) {
+                      parsedSchedule.push({
+                        name: name.trim(),
+                        email: '',
+                        phone: '',
+                        role: 'Altar Server',
+                        mass: mass,
+                        date: date,
+                        notes: currentNotes,
+                        specialMassNotes: currentSpecialMassNotes
+                      });
+                      volunteerSet.add(name.trim());
+                      newVolunteerLists[mass]['Altar Server'].push(name.trim());
+                    }
+                  });
+                }
+
+                if (columnMap['ushers'] !== undefined && row[columnMap['ushers']]) {
+                  const ushers = String(row[columnMap['ushers']]).split('\n').filter(name => name.trim());
+                  ushers.forEach(name => {
+                    if (name && !excludeNames.test(name)) {
+                      parsedSchedule.push({
+                        name: name.trim(),
+                        email: '',
+                        phone: '',
+                        role: 'Usher',
+                        mass: mass,
+                        date: date,
+                        notes: currentNotes,
+                        specialMassNotes: currentSpecialMassNotes
+                      });
+                      volunteerSet.add(name.trim());
+                      newVolunteerLists[mass]['Usher'].push(name.trim());
+                    }
+                  });
+                }
+
+                if (columnMap['offertory_family'] !== undefined && row[columnMap['offertory_family']]) {
+                  const name = String(row[columnMap['offertory_family']]).trim();
+                  if (name && !excludeNames.test(name)) {
+                    parsedSchedule.push({
+                      name: name,
+                      email: '',
+                      phone: '',
+                      role: 'Offertory Family',
+                      mass: mass,
+                      date: date,
+                      notes: currentNotes,
+                      specialMassNotes: currentSpecialMassNotes
+                    });
+                    volunteerSet.add(name);
+                    newVolunteerLists[mass]['Offertory Family'].push(name);
+                  }
+                }
+              }
+
+              setMonthlySchedules(prev => ({ ...prev, [uploadMonth]: parsedSchedule }));
+              setVolunteerLists(prev => ({ ...prev, [uploadMonth]: newVolunteerLists }));
+
+              const uniqueVolunteers = [...volunteerSet].map(name => ({
+                name,
+                email: '',
+                phone: ''
+              }));
+              setVolunteers(prev => [...new Set([...prev, ...uniqueVolunteers].map(v => v.name))].map(name => ({
+                name,
+                email: '',
+                phone: ''
+              })));
+
+              console.log('Parsed schedule for month', uploadMonth, ':', parsedSchedule);
+              console.log('Volunteer lists for month', uploadMonth, ':', newVolunteerLists);
+              console.log('Monthly schedules updated:', { ...monthlySchedules, [uploadMonth]: parsedSchedule });
+
+              if (isBackendConnected) {
+                exportToGoogleSheets(parsedSchedule);
+              } else {
+                setError('Cannot save to Google Sheets: Backend not connected');
+              }
+            } catch (parseError) {
+              console.error('Error parsing Excel file:', parseError);
+              setError('Error parsing Excel file: ' + parseError.message);
             }
           };
           reader.readAsArrayBuffer(file);
         } catch (err) {
-          console.error('File upload error:', err.message);
+          console.error('File upload error:', err);
           setError('Error processing file: ' + err.message);
         }
+      };
+
+      const handleMassChange = (e) => {
+        const selectedMass = e.target.value;
+        setAbsence({ ...absence, mass: selectedMass, role: '', volunteer: '' });
+        setFilteredVolunteers([]);
+
+        const monthKey = `${selectedDate.substring(0, 7)}`;
+        const massVolunteerLists = volunteerLists[monthKey]?.[selectedMass] || {};
+        const availableRoles = roles.filter(role => massVolunteerLists[role]?.length > 0);
+        if (availableRoles.length > 0) {
+          setAbsence(prev => ({ ...prev, role: availableRoles[0] }));
+          setFilteredVolunteers(massVolunteerLists[availableRoles[0]] || []);
+        }
+      };
+
+      const handleRoleChange = (e) => {
+        const selectedRole = e.target.value;
+        setAbsence({ ...absence, role: selectedRole, volunteer: '' });
+
+        const monthKey = `${selectedDate.substring(0, 7)}`;
+        const massVolunteerLists = volunteerLists[monthKey]?.[absence.mass] || {};
+        setFilteredVolunteers(massVolunteerLists[selectedRole] || []);
       };
 
       const exportToGoogleSheets = (data) => {
@@ -178,7 +561,7 @@
           }
         })
         .catch(error => {
-          console.error('Export error:', error.message);
+          console.error('Export error:', error);
           setError('Error sending to Google Sheets: ' + error.message);
         });
       };
@@ -189,7 +572,11 @@
           setError('Cannot send notifications: Backend not connected');
           return;
         }
-        const volunteersForMass = schedule.filter(item => item.mass === mass && item.date === date);
+
+        const monthKey = `${selectedDate.substring(0, 7)}`;
+        const currentSchedule = monthlySchedules[monthKey] || [];
+
+        const volunteersForMass = currentSchedule.filter(item => item.mass === mass && item.date === date);
         fetch(scriptURL, {
           method: 'POST',
           body: JSON.stringify({ action: 'sendNotifications', volunteers: volunteersForMass, mass, date }),
@@ -209,7 +596,7 @@
           }
         })
         .catch(error => {
-          console.error('Notifications error:', error.message);
+          console.error('Notifications error:', error);
           setError('Error sending notifications: ' + error.message);
         });
       };
@@ -222,8 +609,24 @@
           return;
         }
         const { volunteer, role, mass } = absence;
+        if (!mass) {
+          setError('Please select a mass first.');
+          return;
+        }
+        if (!role) {
+          setError('Please select a role.');
+          return;
+        }
+        if (!volunteer) {
+          setError('Please select a volunteer.');
+          return;
+        }
         const date = new Date().toISOString().split('T')[0];
-        const group = schedule.filter(item => item.role === role);
+
+        const monthKey = `${selectedDate.substring(0, 7)}`;
+        const currentSchedule = monthlySchedules[monthKey] || [];
+
+        const group = currentSchedule.filter(item => item.role === role);
         fetch(scriptURL, {
           method: 'POST',
           body: JSON.stringify({ action: 'sendAbsence', volunteer, role, mass, date, group }),
@@ -239,138 +642,314 @@
           if (data.success) {
             alert(`Absence notification sent for ${volunteer}`);
             setAbsence({ volunteer: '', role: '', mass: '' });
+            setFilteredVolunteers([]);
           } else {
             setError('Failed to send absence notification: ' + (data.error || 'Unknown error'));
           }
         })
         .catch(error => {
-          console.error('Absence error:', error.message);
+          console.error('Absence error:', error);
           setError('Error sending absence notification: ' + error.message);
         });
       };
 
-      console.log('Rendering UI, isLoaded state:', isLoaded);
+      const getWeekendDates = (selectedDate) => {
+        const date = new Date(selectedDate);
+        const day = date.getDay();
+        
+        const saturday = new Date(date);
+        saturday.setDate(date.getDate() - day + (day === 0 ? -1 : 6));
+        const sunday = new Date(saturday);
+        sunday.setDate(saturday.getDate() + 1);
+
+        const formatDate = (d) => {
+          const month = d.toLocaleString('en-US', { month: 'long' });
+          const dayNum = d.getDate();
+          const year = d.getFullYear();
+          return `${month} ${dayNum}, ${year}`;
+        };
+
+        return {
+          saturday: formatDate(saturday),
+          sunday: formatDate(sunday)
+        };
+      };
+
+      const { saturday, sunday } = getWeekendDates(selectedDate);
+
+      const monthKey = `${selectedDate.substring(0, 7)}`;
+      const currentSchedule = React.useMemo(() => monthlySchedules[monthKey] || [], [monthKey, monthlySchedules]);
+
+      console.log('Rendering UI, isLoaded:', isLoaded);
       if (!isLoaded) {
-        return <div className="text-center text-xl">Loading Church Scheduler...</div>;
+        return <div className="text-center text-xl text-gray-600">Loading Church Scheduler...</div>;
+      }
+
+      if (!userRole) {
+        return (
+          <div className="space-y-8">
+            <h1 className="text-4xl font-bold text-center text-blue-800">Church Volunteer Scheduler</h1>
+            <div className="bg-white p-6 rounded-lg shadow-lg hover-scale">
+              <h2 className="text-2xl font-semibold mb-4 text-gray-800">Select Your Role</h2>
+              <div className="space-y-4">
+                <button
+                  onClick={() => handleRoleSelection('volunteer')}
+                  className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Volunteer
+                </button>
+                <button
+                  onClick={() => handleRoleSelection('coordinator')}
+                  className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Coordinator/Parish Staff
+                </button>
+                <button
+                  onClick={() => handleRoleSelection('admin')}
+                  className="w-full bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Admin
+                </button>
+              </div>
+            </div>
+          </div>
+        );
       }
 
       return (
-        <div className="space-y-6">
-          <h1 className="text-3xl font-bold text-center">Church Volunteer Scheduler</h1>
+        <div className="space-y-8">
+          <h1 className="text-4xl font-bold text-center text-blue-800">Church Volunteer Scheduler</h1>
           {error && (
-            <div className="text-center text-red-500">
-              <p>Error: {error}</p>
-              <p>Please check the console for details and verify the Google Apps Script URL.</p>
+            <div className="text-center text-red-500 bg-red-100 p-4 rounded-lg shadow-md">
+              <p className="font-semibold">Error: {error}</p>
+              <button
+                onClick={() => setError(null)}
+                className="mt-3 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                Clear Error
+              </button>
             </div>
           )}
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h2 className="text-xl font-semibold mb-4">Diagnostics</h2>
-            <p>Connection Status: {connectionStatus}</p>
-            <button
-              onClick={testConnection}
-              className="mt-2 bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600"
-            >
-              Test Connection
-            </button>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h2 className="text-xl font-semibold mb-4">Upload Schedule (Excel)</h2>
-            <div className="flex items-center space-x-4">
-              <input
-                type="file"
-                accept=".xlsx, .xls"
-                onChange={handleFileChange}
-                className="block w-full text-sm text-gray-500
-                  file:mr-4 file:py-2 file:px-4
-                  file:rounded-full file:border-0
-                  file:text-sm file:font-semibold
-                  file:bg-blue-50 file:text-blue-700
-                  hover:file:bg-blue-100"
-              />
-              <button
-                onClick={handleFileUpload}
-                className="bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600"
-              >
-                Upload
-              </button>
+          {showLogin ? (
+            <div className="bg-white p-6 rounded-lg shadow-lg">
+              <h2 className="text-2xl font-semibold mb-4 text-gray-800">{loginRole === 'coordinator' ? 'Coordinator/Parish Staff Login' : 'Admin Login'}</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Password</label>
+                  <input
+                    type="password"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                    placeholder={`Enter ${loginRole} password`}
+                  />
+                </div>
+                <button
+                  onClick={handleLogin}
+                  className="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Login
+                </button>
+                <button
+                  onClick={() => { setShowLogin(false); setPasswordInput(''); }}
+                  className="bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors ml-4"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h2 className="text-xl font-semibold mb-4">Current Schedule</h2>
-            <div className="grid grid-cols-1 gap-4">
-              {masses.map(mass => (
-                <div key={mass} className="border p-4 rounded">
-                  <h3 className="text-lg font-medium">{mass}</h3>
-                  {roles.map(role => (
-                    <div key={role}>
-                      <p className="font-semibold">{role}:</p>
-                      {schedule
-                        .filter(item => item.mass === mass && item.role === role)
-                        .map((item, idx) => (
-                          <p key={idx}>{item.name} ({item.date})</p>
-                        ))}
-                    </div>
-                  ))}
+          ) : (
+            <>
+              <div className="text-center">
+                <p className="text-gray-600 mb-2">Logged in as: {userRole === 'volunteer' ? 'Volunteer' : userRole === 'coordinator' ? 'Coordinator/Parish Staff' : 'Admin'}</p>
+                <button
+                  onClick={handleLogout}
+                  className="bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Logout
+                </button>
+              </div>
+              {userRole === 'admin' && (
+                <div className="bg-white p-6 rounded-lg shadow-lg hover-scale">
+                  <h2 className="text-2xl font-semibold mb-4 text-gray-800">Diagnostics</h2>
+                  <p className="text-gray-600">Connection Status: <span className={isBackendConnected ? 'text-green-600' : 'text-red-600'}>{connectionStatus}</span></p>
                   <button
-                    onClick={() => sendNotifications(mass, new Date().toISOString().split('T')[0])}
-                    className="mt-2 bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
+                    onClick={testConnection}
+                    className="mt-4 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors"
                   >
-                    Send Weekly Notifications
+                    Test Connection
                   </button>
                 </div>
-              ))}
-            </div>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h2 className="text-xl font-semibold mb-4">Report Absence</h2>
-            <form onSubmit={handleAbsence} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Volunteer</label>
-                <select
-                  value={absence.volunteer}
-                  onChange={(e) => setAbsence({ ...absence, volunteer: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                >
-                  <option value="">Select Volunteer</option>
-                  {volunteers.map(vol => (
-                    <option key={vol.name} value={vol.name}>{vol.name}</option>
-                  ))}
-                </select>
+              )}
+              {(userRole === 'coordinator' || userRole === 'admin') && (
+                <div className="bg-white p-6 rounded-lg shadow-lg hover-scale">
+                  <h2 className="text-2xl font-semibold mb-4 text-gray-800">Upload Schedule (Excel)</h2>
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-4">
+                      <input
+                        type="file"
+                        accept=".xlsx, .xls"
+                        onChange={handleFileChange}
+                        className="block w-full text-sm text-gray-500
+                          file:mr-4 file:py-2 file:px-4
+                          file:rounded-full file:border-0
+                          file:text-sm file:font-semibold
+                          file:bg-blue-50 file:text-blue-700
+                          hover:file:bg-blue-100"
+                      />
+                    </div>
+                    {file && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Select Sheet</label>
+                          <select
+                            value={uploadSheet}
+                            onChange={(e) => setUploadSheet(e.target.value)}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">Select Sheet</option>
+                            {sheetNames.map(sheet => (
+                              <option key={sheet} value={sheet}>{sheet}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <button
+                          onClick={handleFileUpload}
+                          className="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                          Upload
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+              <div className="bg-white p-6 rounded-lg shadow-lg hover-scale">
+                <h2 className="text-2xl font-semibold mb-4 text-gray-800">Current Schedule</h2>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700">Select Date (Shows Weekend Schedule)</label>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                    min="2025-01-01"
+                    max="2025-12-31"
+                  />
+                </div>
+                {currentSchedule.length === 0 ? (
+                  <div className="text-center text-red-500 bg-red-100 p-4 rounded-lg">
+                    <p>No schedule available for {new Date(selectedDate).toLocaleString('en-US', { month: 'long' })}. {(userRole === 'coordinator' || userRole === 'admin') ? 'Please upload a schedule.' : 'Please contact a coordinator or admin to upload a schedule.'}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {masses.map(mass => {
+                      const dateToShow = mass.includes('Saturday') ? saturday : sunday;
+                      const massAssignments = currentSchedule.filter(item => item.mass === mass && item.date === dateToShow);
+                      if (massAssignments.length === 0) return null;
+
+                      return (
+                        <div key={`${mass}-${dateToShow}`} className="border border-gray-200 p-4 rounded-lg bg-gray-50">
+                          <h3 className="text-lg font-medium text-blue-800">{mass} - {dateToShow}</h3>
+                          <div className="mt-2 space-y-2">
+                            {roles.map(role => {
+                              const assignments = massAssignments.filter(item => item.role === role);
+                              if (assignments.length === 0) return null;
+
+                              return (
+                                <div key={role} className="ml-4">
+                                  <p className="font-semibold text-gray-700">{role}:</p>
+                                  {assignments.map((item, idx) => (
+                                    <p key={idx} className="text-gray-600">{item.name}</p>
+                                  ))}
+                                  {assignments[0]?.notes && (
+                                    <p className="text-sm text-gray-500">Notes: {assignments[0].notes}</p>
+                                  )}
+                                  {assignments[0]?.specialMassNotes && (
+                                    <p className="text-sm text-gray-500">Special Mass Notes: {assignments[0].specialMassNotes}</p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <button
+                            onClick={() => sendNotifications(mass, dateToShow)}
+                            className="mt-3 bg-blue-600 text-white py-1 px-3 rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                          >
+                            Send Notifications
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Role</label>
-                <select
-                  value={absence.role}
-                  onChange={(e) => setAbsence({ ...absence, role: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                >
-                  <option value="">Select Role</option>
-                  {roles.map(role => (
-                    <option key={role} value={role}>{role}</option>
-                  ))}
-                </select>
+              <div className="bg-white p-6 rounded-lg shadow-lg hover-scale">
+                <h2 className="text-2xl font-semibold mb-4 text-gray-800">Report Absence</h2>
+                {currentSchedule.length === 0 ? (
+                  <div className="text-center text-red-500 bg-red-100 p-4 rounded-lg">
+                    <p>No schedule available for {new Date(selectedDate).toLocaleString('en-US', { month: 'long' })}. {(userRole === 'coordinator' || userRole === 'admin') ? 'Please upload a schedule to report absences.' : 'Please contact a coordinator or admin to upload a schedule.'}</p>
+                  </div>
+                ) : (
+                  <form onSubmit={handleAbsence} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Mass</label>
+                      <select
+                        value={absence.mass}
+                        onChange={handleMassChange}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Select Mass</option>
+                        {masses.map(mass => (
+                          <option key={mass} value={mass}>{mass}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Role</label>
+                      <select
+                        value={absence.role}
+                        onChange={handleRoleChange}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        disabled={!absence.mass}
+                      >
+                        <option value="">Select Role</option>
+                        {roles.filter(role => volunteerLists[monthKey]?.[absence.mass]?.[role]?.length > 0).map(role => (
+                          <option key={role} value={role}>{role}</option>
+                        ))}
+                      </select>
+                      {!absence.mass && (
+                        <p className="text-sm text-gray-500 mt-1">Please select a mass first to see available roles.</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Volunteer</label>
+                      <select
+                        value={absence.volunteer}
+                        onChange={(e) => setAbsence({ ...absence, volunteer: e.target.value })}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        disabled={!absence.role}
+                      >
+                        <option value="">Select Volunteer</option>
+                        {filteredVolunteers.map(vol => (
+                          <option key={vol} value={vol}>{vol}</option>
+                        ))}
+                      </select>
+                      {!absence.role && (
+                        <p className="text-sm text-gray-500 mt-1">Please select a role first to see available volunteers.</p>
+                      )}
+                    </div>
+                    <button
+                      type="submit"
+                      className="bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
+                    >
+                      Report Absence
+                    </button>
+                  </form>
+                )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Mass</label>
-                <select
-                  value={absence.mass}
-                  onChange={(e) => setAbsence({ ...absence, mass: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                >
-                  <option value="">Select Mass</option>
-                  {masses.map(mass => (
-                    <option key={mass} value={mass}>{mass}</option>
-                  ))}
-                </select>
-              </div>
-              <button
-                type="submit"
-                className="bg-red-500 text-white py-2 px-4 rounded hover:bg-red-600"
-              >
-                Report Absence
-              </button>
-            </form>
-          </div>
+            </>
+          )}
         </div>
       );
     }
@@ -384,7 +963,7 @@
       ReactDOM.render(<App />, document.getElementById('root'));
       console.log('React app rendered');
     } catch (err) {
-      console.error('Render error:', err.message);
+      console.error('Render error:', err);
       document.getElementById('root').innerHTML = `
         <div class="text-center text-red-500">
           <h1 class="text-3xl font-bold">Church Volunteer Scheduler</h1>
