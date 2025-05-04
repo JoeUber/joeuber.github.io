@@ -39,14 +39,41 @@
       '11:00 AM Sunday Mass'
     ];
     const scriptURL = 'https://script.google.com/macros/s/AKfycbxOdeMxrmmy5NQ29XnYdqtzgBBgxfHL-u0upcLV5yNdocxwSXWQRZqcKO8zJoQDpqlCwg/exec';
-    const COORDINATOR_PASSWORD = 'coord123'; // Hardcoded coordinator password
-    const ADMIN_PASSWORD = 'stpaulsdev3'; // Hardcoded admin password
+    const COORDINATOR_PASSWORD = 'coord123';
+    const ADMIN_PASSWORD = 'stpaulsdev3';
+
+    // Error Boundary Component
+    class ErrorBoundary extends React.Component {
+      state = { hasError: false, error: null };
+
+      static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+      }
+
+      componentDidCatch(error, errorInfo) {
+        console.error('Caught error in ErrorBoundary:', error, errorInfo);
+      }
+
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div className="text-center text-red-500">
+              <h1 className="text-3xl font-bold">Church Volunteer Scheduler</h1>
+              <p>Error rendering app: {this.state.error?.message || 'Unknown error'}</p>
+              <p>Please check the console (right-click > Inspect > Console) for details.</p>
+              <p>Try refreshing the page or contact support.</p>
+            </div>
+          );
+        }
+        return this.props.children;
+      }
+    }
 
     function App() {
-      const [userRole, setUserRole] = React.useState(null); // null, 'volunteer', 'coordinator', 'admin'
+      const [userRole, setUserRole] = React.useState(null);
       const [passwordInput, setPasswordInput] = React.useState('');
       const [showLogin, setShowLogin] = React.useState(false);
-      const [loginRole, setLoginRole] = React.useState(''); // 'coordinator' or 'admin'
+      const [loginRole, setLoginRole] = React.useState('');
       const [monthlySchedules, setMonthlySchedules] = React.useState({});
       const [volunteerLists, setVolunteerLists] = React.useState({});
       const [volunteers, setVolunteers] = React.useState([]);
@@ -63,27 +90,9 @@
 
       React.useEffect(() => {
         console.log('App mounted, checking CDNs...');
-        if (!window.React) {
-          console.error('React not loaded');
-          setError('React failed to load. Please check your internet connection and console for details.');
-          setIsLoaded(true);
-          return;
-        }
-        if (!window.ReactDOM) {
-          console.error('ReactDOM not loaded');
-          setError('ReactDOM failed to load. Please check your internet connection and console for details.');
-          setIsLoaded(true);
-          return;
-        }
-        if (!window.Babel) {
-          console.error('Babel not loaded');
-          setError('Babel failed to load. Please check your internet connection and console for details.');
-          setIsLoaded(true);
-          return;
-        }
-        if (!window.XLSX) {
-          console.error('XLSX not loaded');
-          setError('XLSX library failed to load. Please check your internet connection and console for details.');
+        if (!window.React || !window.ReactDOM || !window.Babel || !window.XLSX) {
+          console.error('Required libraries not loaded');
+          setError('Failed to load required libraries. Please check your internet connection and console for details.');
           setIsLoaded(true);
           return;
         }
@@ -91,14 +100,23 @@
         setIsLoaded(true);
       }, []);
 
+      React.useEffect(() => {
+        console.log('ShowLogin state changed:', showLogin, 'LoginRole:', loginRole);
+      }, [showLogin, loginRole]);
+
       const handleRoleSelection = (role) => {
         console.log('Role selected:', role);
         if (role === 'volunteer') {
+          console.log('Setting userRole to volunteer');
           setUserRole('volunteer');
           setShowLogin(false);
+          setLoginRole('');
         } else {
+          console.log('Setting loginRole to:', role, 'and showing login form');
           setLoginRole(role);
           setShowLogin(true);
+          setPasswordInput('');
+          setError(null);
         }
       };
 
@@ -126,7 +144,9 @@
         setConnectionStatus('Not tested');
         setIsBackendConnected(false);
         setShowLogin(false);
+        setLoginRole('');
         setPasswordInput('');
+        setError(null);
       };
 
       const testConnection = () => {
@@ -519,7 +539,7 @@
 
       const handleMassChange = (e) => {
         const selectedMass = e.target.value;
-        setAbsence({ ...absence, mass: selectedMass, role: '', volunteer: '' });
+        setAbsence(prev => ({ ...prev, mass: selectedMass, role: '', volunteer: '' }));
         setFilteredVolunteers([]);
 
         const monthKey = `${selectedDate.substring(0, 7)}`;
@@ -533,7 +553,7 @@
 
       const handleRoleChange = (e) => {
         const selectedRole = e.target.value;
-        setAbsence({ ...absence, role: selectedRole, volunteer: '' });
+        setAbsence(prev => ({ ...prev, role: selectedRole, volunteer: '' }));
 
         const monthKey = `${selectedDate.substring(0, 7)}`;
         const massVolunteerLists = volunteerLists[monthKey]?.[absence.mass] || {};
@@ -686,6 +706,7 @@
       }
 
       if (!userRole) {
+        console.log('Rendering role selection UI');
         return (
           <div className="space-y-8">
             <h1 className="text-4xl font-bold text-center text-blue-800">Church Volunteer Scheduler</h1>
@@ -716,6 +737,7 @@
         );
       }
 
+      console.log('Rendering main UI, showLogin:', showLogin);
       return (
         <div className="space-y-8">
           <h1 className="text-4xl font-bold text-center text-blue-800">Church Volunteer Scheduler</h1>
@@ -751,7 +773,7 @@
                   Login
                 </button>
                 <button
-                  onClick={() => { setShowLogin(false); setPasswordInput(''); }}
+                  onClick={() => { setShowLogin(false); setPasswordInput(''); setError(null); }}
                   className="bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors ml-4"
                 >
                   Cancel
@@ -960,7 +982,12 @@
         throw new Error('One or more required libraries (React, ReactDOM, Babel, or XLSX) failed to load.');
       }
       console.log('Rendering React app...');
-      ReactDOM.render(<App />, document.getElementById('root'));
+      ReactDOM.render(
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>,
+        document.getElementById('root')
+      );
       console.log('React app rendered');
     } catch (err) {
       console.error('Render error:', err);
