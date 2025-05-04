@@ -59,13 +59,11 @@
         console.log('CDNs loaded, testing backend connection...');
 
         const timeout = setTimeout(() => {
-          if (!isLoaded) {
-            console.log('Backend connection timed out');
-            setError('Backend connection timed out. Please check the Google Apps Script URL and deployment settings.');
-            setConnectionStatus('Connection timed out');
-            setIsBackendConnected(false);
-            setIsLoaded(true);
-          }
+          console.log('Backend connection timed out, forcing UI update');
+          setError('Backend connection timed out. Please check the Google Apps Script URL and deployment settings.');
+          setConnectionStatus('Connection timed out');
+          setIsBackendConnected(false);
+          setIsLoaded(true);
         }, 10000);
 
         testConnection();
@@ -88,7 +86,6 @@
         })
         .then(data => {
           console.log('Fetch response data:', data);
-          setIsLoaded(true);
           if (data.success) {
             setConnectionStatus('Connected to Google Apps Script: ' + (data.message || 'Success'));
             setIsBackendConnected(true);
@@ -100,22 +97,28 @@
         })
         .catch(err => {
           console.error('Fetch error:', err.message);
-          setIsLoaded(true);
           setError('Error connecting to backend: ' + err.message);
           setConnectionStatus('Connection error: ' + err.message);
           setIsBackendConnected(false);
         })
         .finally(() => {
-          console.log('Fetch completed, ensuring UI update with isLoaded:', isLoaded);
-          if (!isLoaded) setIsLoaded(true);
+          console.log('Fetch completed, setting isLoaded to true');
+          setIsLoaded(true);
         });
       };
 
-      const handleFileUpload = (event) => {
-        console.log('Handling file upload...');
+      const handleFileChange = (event) => {
+        console.log('File selected:', event.target.files[0]?.name);
+        setFile(event.target.files[0]);
+      };
+
+      const handleFileUpload = () => {
+        if (!file) {
+          setError('Please select a file to upload.');
+          return;
+        }
+        console.log('Handling file upload for:', file.name);
         try {
-          const file = event.target.files[0];
-          setFile(file);
           const reader = new FileReader();
           reader.onload = (e) => {
             const data = new Uint8Array(e.target.result);
@@ -246,7 +249,7 @@
         });
       };
 
-      console.log('Rendering UI, isLoaded:', isLoaded);
+      console.log('Rendering UI, isLoaded state:', isLoaded);
       if (!isLoaded) {
         return <div className="text-center text-xl">Loading Church Scheduler...</div>;
       }
@@ -272,17 +275,25 @@
           </div>
           <div className="bg-white p-6 rounded-lg shadow">
             <h2 className="text-xl font-semibold mb-4">Upload Schedule (Excel)</h2>
-            <input
-              type="file"
-              accept=".xlsx, .xls"
-              onChange={handleFileUpload}
-              className="block w-full text-sm text-gray-500
-                file:mr-4 file:py-2 file:px-4
-                file:rounded-full file:border-0
-                file:text-sm file:font-semibold
-                file:bg-blue-50 file:text-blue-700
-                hover:file:bg-blue-100"
-            />
+            <div className="flex items-center space-x-4">
+              <input
+                type="file"
+                accept=".xlsx, .xls"
+                onChange={handleFileChange}
+                className="block w-full text-sm text-gray-500
+                  file:mr-4 file:py-2 file:px-4
+                  file:rounded-full file:border-0
+                  file:text-sm file:font-semibold
+                  file:bg-blue-50 file:text-blue-700
+                  hover:file:bg-blue-100"
+              />
+              <button
+                onClick={handleFileUpload}
+                className="bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600"
+              >
+                Upload
+              </button>
+            </div>
           </div>
           <div className="bg-white p-6 rounded-lg shadow">
             <h2 className="text-xl font-semibold mb-4">Current Schedule</h2>
