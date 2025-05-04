@@ -36,15 +36,19 @@
         fetch(scriptURL, {
           method: 'POST',
           body: JSON.stringify({ test: true }),
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          mode: 'cors'
         })
-        .then(response => response.json())
+        .then(response => {
+          if (!response.ok) throw new Error('Network response was not ok: ' + response.status);
+          return response.json();
+        })
         .then(data => {
           setLoading(false);
           if (data.success) {
-            setConnectionStatus('Connected to Google Apps Script');
+            setConnectionStatus('Connected to Google Apps Script: ' + (data.message || 'Success'));
           } else {
-            setError('Failed to connect to Google Apps Script');
+            setError('Failed to connect to Google Apps Script: ' + (data.error || 'Unknown error'));
             setConnectionStatus('Connection failed');
           }
         })
@@ -94,14 +98,18 @@
         fetch(scriptURL, {
           method: 'POST',
           body: JSON.stringify(data),
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          mode: 'cors'
         })
-        .then(response => response.json())
+        .then(response => {
+          if (!response.ok) throw new Error('Network response was not ok: ' + response.status);
+          return response.json();
+        })
         .then(data => {
           if (data.success) {
             console.log('Data sent to Google Sheets:', data);
           } else {
-            setError('Failed to save to Google Sheets');
+            setError('Failed to save to Google Sheets: ' + (data.error || 'Unknown error'));
           }
         })
         .catch(error => setError('Error sending to Google Sheets: ' + error.message));
@@ -113,14 +121,18 @@
         fetch(scriptURL, {
           method: 'POST',
           body: JSON.stringify({ action: 'sendNotifications', volunteers: volunteersForMass, mass, date }),
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          mode: 'cors'
         })
-        .then(response => response.json())
+        .then(response => {
+          if (!response.ok) throw new Error('Network response was not ok: ' + response.status);
+          return response.json();
+        })
         .then(data => {
           if (data.success) {
             alert('Notifications sent successfully');
           } else {
-            setError('Failed to send notifications');
+            setError('Failed to send notifications: ' + (data.error || 'Unknown error'));
           }
         })
         .catch(error => setError('Error sending notifications: ' + error.message));
@@ -135,15 +147,19 @@
         fetch(scriptURL, {
           method: 'POST',
           body: JSON.stringify({ action: 'sendAbsence', volunteer, role, mass, date, group }),
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          mode: 'cors'
         })
-        .then(response => response.json())
+        .then(response => {
+          if (!response.ok) throw new Error('Network response was not ok: ' + response.status);
+          return response.json();
+        })
         .then(data => {
           if (data.success) {
             alert(`Absence notification sent for ${volunteer}`);
             setAbsence({ volunteer: '', role: '', mass: '' });
           } else {
-            setError('Failed to send absence notification');
+            setError('Failed to send absence notification: ' + (data.error || 'Unknown error'));
           }
         })
         .catch(error => setError('Error sending absence notification: ' + error.message));
