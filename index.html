@@ -70,7 +70,7 @@
     }
 
     function App() {
-      const [userRole, setUserRole] = React.useState(null);
+      const [userRole, setUserRole] = React.useState('volunteer');
       const [passwordInput, setPasswordInput] = React.useState('');
       const [showLogin, setShowLogin] = React.useState(false);
       const [loginRole, setLoginRole] = React.useState('');
@@ -88,9 +88,10 @@
       const [isLoaded, setIsLoaded] = React.useState(false);
       const [selectedDate, setSelectedDate] = React.useState('2025-05-03');
 
-      // Debounce state for button clicks
+      // Debounce state for button clicks and input updates
       const [lastClickTime, setLastClickTime] = React.useState(0);
-      const DEBOUNCE_TIME = 300; // 300ms debounce
+      const [lastInputTime, setLastInputTime] = React.useState(0);
+      const DEBOUNCE_TIME = 300;
 
       React.useEffect(() => {
         console.log('App mounted, checking CDNs...');
@@ -104,12 +105,8 @@
         setIsLoaded(true);
       }, []);
 
-      React.useEffect(() => {
-        console.log('ShowLogin state changed:', showLogin, 'LoginRole:', loginRole);
-      }, [showLogin, loginRole]);
-
       const handleRoleSelection = (role, event) => {
-        event.stopPropagation(); // Prevent event bubbling
+        event.stopPropagation();
         const now = Date.now();
         if (now - lastClickTime < DEBOUNCE_TIME) {
           console.log('Debounced click, ignoring');
@@ -132,6 +129,16 @@
         }
       };
 
+      const handlePasswordInputChange = (e) => {
+        const now = Date.now();
+        if (now - lastInputTime < DEBOUNCE_TIME) {
+          console.log('Debounced input change, ignoring');
+          return;
+        }
+        setLastInputTime(now);
+        setPasswordInput(e.target.value);
+      };
+
       const handleLogin = () => {
         console.log('Attempting login for role:', loginRole, 'with password:', passwordInput);
         const correctPassword = loginRole === 'coordinator' ? COORDINATOR_PASSWORD : ADMIN_PASSWORD;
@@ -152,7 +159,7 @@
 
       const handleLogout = () => {
         console.log('Logging out, resetting userRole');
-        setUserRole(null);
+        setUserRole('volunteer');
         setConnectionStatus('Not tested');
         setIsBackendConnected(false);
         setShowLogin(false);
@@ -190,7 +197,7 @@
         .catch(err => {
           console.error('Fetch error details:', err);
           setError('Error connecting to backend: ' + err.message);
-          setConnectionStatus('Connection error: ' + err.message);
+          setConnectionStatus('Connection error: Failed to connect. Ensure the Google Apps Script is deployed and accessible.');
           setIsBackendConnected(false);
         });
       };
@@ -359,7 +366,7 @@
                   date = `${month} ${dayNum}, 2025`;
                   mass = `${time} ${dayOfWeek} Mass`;
                 } else {
-                  console.log(`Skipping row ${rowIndex + 1}: Incomplete date components - ${timeDateCell}`);
+                  console.log(`Row ${rowIndex + 1} skipped: Missing day of week or time for date '${timeDateCell}'`);
                   continue;
                 }
 
@@ -720,54 +727,23 @@
         return <div className="text-center text-xl text-gray-600">Loading Church Scheduler...</div>;
       }
 
-      if (!userRole) {
-        console.log('Rendering role selection UI');
+      console.log('Rendering UI, showLogin:', showLogin, 'userRole:', userRole);
+      if (showLogin) {
+        console.log('Rendering login form for role:', loginRole);
         return (
           <div className="space-y-8">
             <h1 className="text-4xl font-bold text-center text-blue-800">Church Volunteer Scheduler</h1>
-            <div className="bg-white p-6 rounded-lg shadow-lg hover-scale">
-              <h2 className="text-2xl font-semibold mb-4 text-gray-800">Select Your Role</h2>
-              <div className="space-y-4">
+            {error && (
+              <div className="text-center text-red-500 bg-red-100 p-4 rounded-lg shadow-md">
+                <p className="font-semibold">Error: {error}</p>
                 <button
-                  onClick={(e) => handleRoleSelection('volunteer', e)}
-                  className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                  onClick={() => setError(null)}
+                  className="mt-3 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors"
                 >
-                  Volunteer
-                </button>
-                <button
-                  onClick={(e) => handleRoleSelection('coordinator', e)}
-                  className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  Coordinator/Parish Staff
-                </button>
-                <button
-                  onClick={(e) => handleRoleSelection('admin', e)}
-                  className="w-full bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Admin
+                  Clear Error
                 </button>
               </div>
-            </div>
-          </div>
-        );
-      }
-
-      console.log('Rendering main UI, showLogin:', showLogin);
-      return (
-        <div className="space-y-8">
-          <h1 className="text-4xl font-bold text-center text-blue-800">Church Volunteer Scheduler</h1>
-          {error && (
-            <div className="text-center text-red-500 bg-red-100 p-4 rounded-lg shadow-md">
-              <p className="font-semibold">Error: {error}</p>
-              <button
-                onClick={() => setError(null)}
-                className="mt-3 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                Clear Error
-              </button>
-            </div>
-          )}
-          {showLogin ? (
+            )}
             <div className="bg-white p-6 rounded-lg shadow-lg">
               <h2 className="text-2xl font-semibold mb-4 text-gray-800">{loginRole === 'coordinator' ? 'Coordinator/Parish Staff Login' : 'Admin Login'}</h2>
               <div className="space-y-4">
@@ -776,7 +752,7 @@
                   <input
                     type="password"
                     value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
+                    onChange={handlePasswordInputChange}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
                     placeholder={`Enter ${loginRole} password`}
                   />
@@ -795,198 +771,233 @@
                 </button>
               </div>
             </div>
-          ) : (
-            <>
-              <div className="text-center">
-                <p className="text-gray-600 mb-2">Logged in as: {userRole === 'volunteer' ? 'Volunteer' : userRole === 'coordinator' ? 'Coordinator/Parish Staff' : 'Admin'}</p>
-                <button
-                  onClick={handleLogout}
-                  className="bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Logout
-                </button>
-              </div>
-              {userRole === 'admin' && (
-                <div className="bg-white p-6 rounded-lg shadow-lg hover-scale">
-                  <h2 className="text-2xl font-semibold mb-4 text-gray-800">Diagnostics</h2>
-                  <p className="text-gray-600">Connection Status: <span className={isBackendConnected ? 'text-green-600' : 'text-red-600'}>{connectionStatus}</span></p>
-                  <button
-                    onClick={testConnection}
-                    className="mt-4 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors"
-                  >
-                    Test Connection
-                  </button>
-                </div>
-              )}
-              {(userRole === 'coordinator' || userRole === 'admin') && (
-                <div className="bg-white p-6 rounded-lg shadow-lg hover-scale">
-                  <h2 className="text-2xl font-semibold mb-4 text-gray-800">Upload Schedule (Excel)</h2>
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-4">
-                      <input
-                        type="file"
-                        accept=".xlsx, .xls"
-                        onChange={handleFileChange}
-                        className="block w-full text-sm text-gray-500
-                          file:mr-4 file:py-2 file:px-4
-                          file:rounded-full file:border-0
-                          file:text-sm file:font-semibold
-                          file:bg-blue-50 file:text-blue-700
-                          hover:file:bg-blue-100"
-                      />
-                    </div>
-                    {file && (
-                      <>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Select Sheet</label>
-                          <select
-                            value={uploadSheet}
-                            onChange={(e) => setUploadSheet(e.target.value)}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                          >
-                            <option value="">Select Sheet</option>
-                            {sheetNames.map(sheet => (
-                              <option key={sheet} value={sheet}>{sheet}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <button
-                          onClick={handleFileUpload}
-                          className="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
-                        >
-                          Upload
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-              <div className="bg-white p-6 rounded-lg shadow-lg hover-scale">
-                <h2 className="text-2xl font-semibold mb-4 text-gray-800">Current Schedule</h2>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700">Select Date (Shows Weekend Schedule)</label>
+          </div>
+        );
+      }
+
+      console.log('Rendering main app UI for role:', userRole);
+      return (
+        <div className="space-y-8">
+          <h1 className="text-4xl font-bold text-center text-blue-800">Church Volunteer Scheduler</h1>
+          {error && (
+            <div className="text-center text-red-500 bg-red-100 p-4 rounded-lg shadow-md">
+              <p className="font-semibold">Error: {error}</p>
+              <button
+                onClick={() => setError(null)}
+                className="mt-3 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                Clear Error
+              </button>
+            </div>
+          )}
+          <div className="text-center space-y-2">
+            <p className="text-gray-600">Logged in as: {userRole === 'volunteer' ? 'Volunteer' : userRole === 'coordinator' ? 'Coordinator/Parish Staff' : 'Admin'}</p>
+            <div className="flex justify-center space-x-4">
+              <button
+                onClick={(e) => handleRoleSelection('volunteer', e)}
+                className={`py-2 px-4 rounded-lg transition-colors ${userRole === 'volunteer' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+              >
+                Volunteer
+              </button>
+              <button
+                onClick={(e) => handleRoleSelection('coordinator', e)}
+                className={`py-2 px-4 rounded-lg transition-colors ${userRole === 'coordinator' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+              >
+                Coordinator/Parish Staff
+              </button>
+              <button
+                onClick={(e) => handleRoleSelection('admin', e)}
+                className={`py-2 px-4 rounded-lg transition-colors ${userRole === 'admin' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+              >
+                Admin
+              </button>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="mt-2 bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
+            >
+              Reset to Volunteer
+            </button>
+          </div>
+          {userRole === 'admin' && (
+            <div className="bg-white p-6 rounded-lg shadow-lg hover-scale">
+              <h2 className="text-2xl font-semibold mb-4 text-gray-800">Diagnostics</h2>
+              <p className="text-gray-600">Connection Status: <span className={isBackendConnected ? 'text-green-600' : 'text-red-600'}>{connectionStatus}</span></p>
+              <button
+                onClick={testConnection}
+                className="mt-4 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                Test Connection
+              </button>
+            </div>
+          )}
+          {(userRole === 'coordinator' || userRole === 'admin') && (
+            <div className="bg-white p-6 rounded-lg shadow-lg hover-scale">
+              <h2 className="text-2xl font-semibold mb-4 text-gray-800">Upload Schedule (Excel)</h2>
+              <div className="space-y-4">
+                <div className="flex items-center space-x-4">
                   <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                    min="2025-01-01"
-                    max="2025-12-31"
+                    type="file"
+                    accept=".xlsx, .xls"
+                    onChange={handleFileChange}
+                    className="block w-full text-sm text-gray-500
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded-full file:border-0
+                      file:text-sm file:font-semibold
+                      file:bg-blue-50 file:text-blue-700
+                      hover:file:bg-blue-100"
                   />
                 </div>
-                {currentSchedule.length === 0 ? (
-                  <div className="text-center text-red-500 bg-red-100 p-4 rounded-lg">
-                    <p>No schedule available for {new Date(selectedDate).toLocaleString('en-US', { month: 'long' })}. {(userRole === 'coordinator' || userRole === 'admin') ? 'Please upload a schedule.' : 'Please contact a coordinator or admin to upload a schedule.'}</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {masses.map(mass => {
-                      const dateToShow = mass.includes('Saturday') ? saturday : sunday;
-                      const massAssignments = currentSchedule.filter(item => item.mass === mass && item.date === dateToShow);
-                      if (massAssignments.length === 0) return null;
-
-                      return (
-                        <div key={`${mass}-${dateToShow}`} className="border border-gray-200 p-4 rounded-lg bg-gray-50">
-                          <h3 className="text-lg font-medium text-blue-800">{mass} - {dateToShow}</h3>
-                          <div className="mt-2 space-y-2">
-                            {roles.map(role => {
-                              const assignments = massAssignments.filter(item => item.role === role);
-                              if (assignments.length === 0) return null;
-
-                              return (
-                                <div key={role} className="ml-4">
-                                  <p className="font-semibold text-gray-700">{role}:</p>
-                                  {assignments.map((item, idx) => (
-                                    <p key={idx} className="text-gray-600">{item.name}</p>
-                                  ))}
-                                  {assignments[0]?.notes && (
-                                    <p className="text-sm text-gray-500">Notes: {assignments[0].notes}</p>
-                                  )}
-                                  {assignments[0]?.specialMassNotes && (
-                                    <p className="text-sm text-gray-500">Special Mass Notes: {assignments[0].specialMassNotes}</p>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                          <button
-                            onClick={() => sendNotifications(mass, dateToShow)}
-                            className="mt-3 bg-blue-600 text-white py-1 px-3 rounded-lg hover:bg-blue-700 transition-colors text-sm"
-                          >
-                            Send Notifications
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              <div className="bg-white p-6 rounded-lg shadow-lg hover-scale">
-                <h2 className="text-2xl font-semibold mb-4 text-gray-800">Report Absence</h2>
-                {currentSchedule.length === 0 ? (
-                  <div className="text-center text-red-500 bg-red-100 p-4 rounded-lg">
-                    <p>No schedule available for {new Date(selectedDate).toLocaleString('en-US', { month: 'long' })}. {(userRole === 'coordinator' || userRole === 'admin') ? 'Please upload a schedule to report absences.' : 'Please contact a coordinator or admin to upload a schedule.'}</p>
-                  </div>
-                ) : (
-                  <form onSubmit={handleAbsence} className="space-y-4">
+                {file && (
+                  <>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Mass</label>
+                      <label className="block text-sm font-medium text-gray-700">Select Sheet</label>
                       <select
-                        value={absence.mass}
-                        onChange={handleMassChange}
+                        value={uploadSheet}
+                        onChange={(e) => setUploadSheet(e.target.value)}
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
                       >
-                        <option value="">Select Mass</option>
-                        {masses.map(mass => (
-                          <option key={mass} value={mass}>{mass}</option>
+                        <option value="">Select Sheet</option>
+                        {sheetNames.map(sheet => (
+                          <option key={sheet} value={sheet}>{sheet}</option>
                         ))}
                       </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Role</label>
-                      <select
-                        value={absence.role}
-                        onChange={handleRoleChange}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                        disabled={!absence.mass}
-                      >
-                        <option value="">Select Role</option>
-                        {roles.filter(role => volunteerLists[monthKey]?.[absence.mass]?.[role]?.length > 0).map(role => (
-                          <option key={role} value={role}>{role}</option>
-                        ))}
-                      </select>
-                      {!absence.mass && (
-                        <p className="text-sm text-gray-500 mt-1">Please select a mass first to see available roles.</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Volunteer</label>
-                      <select
-                        value={absence.volunteer}
-                        onChange={(e) => setAbsence({ ...absence, volunteer: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                        disabled={!absence.role}
-                      >
-                        <option value="">Select Volunteer</option>
-                        {filteredVolunteers.map(vol => (
-                          <option key={vol} value={vol}>{vol}</option>
-                        ))}
-                      </select>
-                      {!absence.role && (
-                        <p className="text-sm text-gray-500 mt-1">Please select a role first to see available volunteers.</p>
-                      )}
                     </div>
                     <button
-                      type="submit"
-                      className="bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
+                      onClick={handleFileUpload}
+                      className="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
                     >
-                      Report Absence
+                      Upload
                     </button>
-                  </form>
+                  </>
                 )}
               </div>
-            </>
+            </div>
           )}
+          <div className="bg-white p-6 rounded-lg shadow-lg hover-scale">
+            <h2 className="text-2xl font-semibold mb-4 text-gray-800">Current Schedule</h2>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700">Select Date (Shows Weekend Schedule)</label>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                min="2025-01-01"
+                max="2025-12-31"
+              />
+            </div>
+            {currentSchedule.length === 0 ? (
+              <div className="text-center text-red-500 bg-red-100 p-4 rounded-lg">
+                <p>No schedule available for {new Date(selectedDate).toLocaleString('en-US', { month: 'long' })}. {(userRole === 'coordinator' || userRole === 'admin') ? 'Please upload a schedule.' : 'Please contact a coordinator or admin to upload a schedule.'}</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {masses.map(mass => {
+                  const dateToShow = mass.includes('Saturday') ? saturday : sunday;
+                  const massAssignments = currentSchedule.filter(item => item.mass === mass && item.date === dateToShow);
+                  if (massAssignments.length === 0) return null;
+
+                  return (
+                    <div key={`${mass}-${dateToShow}`} className="border border-gray-200 p-4 rounded-lg bg-gray-50">
+                      <h3 className="text-lg font-medium text-blue-800">{mass} - {dateToShow}</h3>
+                      <div className="mt-2 space-y-2">
+                        {roles.map(role => {
+                          const assignments = massAssignments.filter(item => item.role === role);
+                          if (assignments.length === 0) return null;
+
+                          return (
+                            <div key={role} className="ml-4">
+                              <p className="font-semibold text-gray-700">{role}:</p>
+                              {assignments.map((item, idx) => (
+                                <p key={idx} className="text-gray-600">{item.name}</p>
+                              ))}
+                              {assignments[0]?.notes && (
+                                <p className="text-sm text-gray-500">Notes: {assignments[0].notes}</p>
+                              )}
+                              {assignments[0]?.specialMassNotes && (
+                                <p className="text-sm text-gray-500">Special Mass Notes: {assignments[0].specialMassNotes}</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <button
+                        onClick={() => sendNotifications(mass, dateToShow)}
+                        className="mt-3 bg-blue-600 text-white py-1 px-3 rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                      >
+                        Send Notifications
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div className="bg-white p-6 rounded-lg shadow-lg hover-scale">
+            <h2 className="text-2xl font-semibold mb-4 text-gray-800">Report Absence</h2>
+            {currentSchedule.length === 0 ? (
+              <div className="text-center text-red-500 bg-red-100 p-4 rounded-lg">
+                <p>No schedule available for {new Date(selectedDate).toLocaleString('en-US', { month: 'long' })}. {(userRole === 'coordinator' || userRole === 'admin') ? 'Please upload a schedule to report absences.' : 'Please contact a coordinator or admin to upload a schedule.'}</p>
+              </div>
+            ) : (
+              <form onSubmit={handleAbsence} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Mass</label>
+                  <select
+                    value={absence.mass}
+                    onChange={handleMassChange}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">Select Mass</option>
+                    {masses.map(mass => (
+                      <option key={mass} value={mass}>{mass}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Role</label>
+                  <select
+                    value={absence.role}
+                    onChange={handleRoleChange}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                    disabled={!absence.mass}
+                  >
+                    <option value="">Select Role</option>
+                    {roles.filter(role => volunteerLists[monthKey]?.[absence.mass]?.[role]?.length > 0).map(role => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
+                  </select>
+                  {!absence.mass && (
+                    <p className="text-sm text-gray-500 mt-1">Please select a mass first to see available roles.</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Volunteer</label>
+                  <select
+                    value={absence.volunteer}
+                    onChange={(e) => setAbsence({ ...absence, volunteer: e.target.value })}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                    disabled={!absence.role}
+                  >
+                    <option value="">Select Volunteer</option>
+                    {filteredVolunteers.map(vol => (
+                      <option key={vol} value={vol}>{vol}</option>
+                    ))}
+                  </select>
+                  {!absence.role && (
+                    <p className="text-sm text-gray-500 mt-1">Please select a role first to see available volunteers.</p>
+                  )}
+                </div>
+                <button
+                  type="submit"
+                  className="bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Report Absence
+                </button>
+              </form>
+            )}
+          </div>
         </div>
       );
     }
