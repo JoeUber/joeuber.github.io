@@ -22,48 +22,89 @@
       const [volunteers, setVolunteers] = React.useState([]);
       const [file, setFile] = React.useState(null);
       const [absence, setAbsence] = React.useState({ volunteer: '', role: '', mass: '' });
+      const [error, setError] = React.useState(null);
+      const [loading, setLoading] = React.useState(true);
+      const [connectionStatus, setConnectionStatus] = React.useState('Not tested');
+
+      React.useEffect(() => {
+        testConnection();
+      }, []);
+
+      const testConnection = () => {
+        const scriptURL = 'YOUR_GOOGLE_APPS_SCRIPT_URL';
+        setConnectionStatus('Testing...');
+        fetch(scriptURL, {
+          method: 'POST',
+          body: JSON.stringify({ test: true }),
+          headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => response.json())
+        .then(data => {
+          setLoading(false);
+          if (data.success) {
+            setConnectionStatus('Connected to Google Apps Script');
+          } else {
+            setError('Failed to connect to Google Apps Script');
+            setConnectionStatus('Connection failed');
+          }
+        })
+        .catch(err => {
+          setLoading(false);
+          setError('Error connecting to backend: ' + err.message);
+          setConnectionStatus('Connection error: ' + err.message);
+        });
+      };
 
       const handleFileUpload = (event) => {
-        const file = event.target.files[0];
-        setFile(file);
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const sheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[sheetName];
-          const json = XLSX.utils.sheet_to_json(worksheet);
-          const parsedSchedule = json.map(row => ({
-            name: row.Name,
-            email: row.Email,
-            phone: row.Phone,
-            role: row.Role,
-            mass: row.Mass,
-            date: row.Date
-          }));
-          setSchedule(parsedSchedule);
-          const uniqueVolunteers = [...new Set(parsedSchedule.map(item => item.name))].map(name => ({
-            name,
-            email: parsedSchedule.find(item => item.name === name).email,
-            phone: parsedSchedule.find(item => item.name === name).phone
-          }));
-          setVolunteers(uniqueVolunteers);
-          // Export to Google Sheets
-          exportToGoogleSheets(json);
-        };
-        reader.readAsArrayBuffer(file);
+        try {
+          const file = event.target.files[0];
+          setFile(file);
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const json = XLSX.utils.sheet_to_json(worksheet);
+            const parsedSchedule = json.map(row => ({
+              name: row.Name,
+              email: row.Email,
+              phone: row.Phone,
+              role: row.Role,
+              mass: row.Mass,
+              date: row.Date
+            }));
+            setSchedule(parsedSchedule);
+            const uniqueVolunteers = [...new Set(parsedSchedule.map(item => item.name))].map(name => ({
+              name,
+              email: parsedSchedule.find(item => item.name === name).email,
+              phone: parsedSchedule.find(item => item.name === name).phone
+            }));
+            setVolunteers(uniqueVolunteers);
+            exportToGoogleSheets(json);
+          };
+          reader.readAsArrayBuffer(file);
+        } catch (err) {
+          setError('Error processing file: ' + err.message);
+        }
       };
 
       const exportToGoogleSheets = (data) => {
-        const scriptURL = 'https://script.google.com/macros/s/AKfycbxMNittyhxgQT2wht3IQWzBjg8_zuJjjpVoVzoLBqKm75Hw6LuHGyZp_EXBcNdnCihijw/exec';
+        const scriptURL = 'YOUR_GOOGLE_APPS_SCRIPT_URL';
         fetch(scriptURL, {
           method: 'POST',
           body: JSON.stringify(data),
           headers: { 'Content-Type': 'application/json' }
         })
         .then(response => response.json())
-        .then(data => console.log('Data sent to Google Sheets:', data))
-        .catch(error => console.error('Error sending to Google Sheets:', error));
+        .then(data => {
+          if (data.success) {
+            console.log('Data sent to Google Sheets:', data);
+          } else {
+            setError('Failed to save to Google Sheets');
+          }
+        })
+        .catch(error => setError('Error sending to Google Sheets: ' + error.message));
       };
 
       const sendNotifications = (mass, date) => {
@@ -75,8 +116,14 @@
           headers: { 'Content-Type': 'application/json' }
         })
         .then(response => response.json())
-        .then(data => alert('Notifications sent successfully'))
-        .catch(error => alert('Error sending notifications: ' + error.message));
+        .then(data => {
+          if (data.success) {
+            alert('Notifications sent successfully');
+          } else {
+            setError('Failed to send notifications');
+          }
+        })
+        .catch(error => setError('Error sending notifications: ' + error.message));
       };
 
       const handleAbsence = (e) => {
@@ -92,16 +139,39 @@
         })
         .then(response => response.json())
         .then(data => {
-          alert(`Absence notification sent for ${volunteer}`);
-          setAbsence({ volunteer: '', role: '', mass: '' });
+          if (data.success) {
+            alert(`Absence notification sent for ${volunteer}`);
+            setAbsence({ volunteer: '', role: '', mass: '' });
+          } else {
+            setError('Failed to send absence notification');
+          }
         })
-        .catch(error => alert('Error sending absence notification: ' + error.message));
+        .catch(error => setError('Error sending absence notification: ' + error.message));
       };
+
+      if (loading) {
+        return <div className="text-center text-xl">Loading...</div>;
+      }
 
       return (
         <div className="space-y-6">
           <h1 className="text-3xl font-bold text-center">Church Volunteer Scheduler</h1>
-          
+          {error && (
+            <div className="text-center text-red-500">
+              <p>Error: {error}</p>
+              <p>Please check the console for details and ensure the Google Apps Script URL is correct.</p>
+            </div>
+          )}
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h2 className="text-xl font-semibold mb-4">Diagnostics</h2>
+            <p>Connection Status: {connectionStatus}</p>
+            <button
+              onClick={testConnection}
+              className="mt-2 bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600"
+            >
+              Test Connection
+            </button>
+          </div>
           <div className="bg-white p-6 rounded-lg shadow">
             <h2 className="text-xl font-semibold mb-4">Upload Schedule (Excel)</h2>
             <input
@@ -116,7 +186,6 @@
                 hover:file:bg-blue-100"
             />
           </div>
-
           <div className="bg-white p-6 rounded-lg shadow">
             <h2 className="text-xl font-semibold mb-4">Current Schedule</h2>
             <div className="grid grid-cols-1 gap-4">
@@ -143,7 +212,6 @@
               ))}
             </div>
           </div>
-
           <div className="bg-white p-6 rounded-lg shadow">
             <h2 className="text-xl font-semibold mb-4">Report Absence</h2>
             <form onSubmit={handleAbsence} className="space-y-4">
@@ -198,7 +266,11 @@
       );
     }
 
-    ReactDOM.render(<App />, document.getElementById('root'));
+    try {
+      ReactDOM.render(<App />, document.getElementById('root'));
+    } catch (err) {
+      document.getElementById('root').innerHTML = '<div class="text-center text-red-500">Error rendering app: ' + err.message + '. Please check the console and ensure all CDN scripts loaded correctly.</div>';
+    }
   </script>
 </body>
 </html>
