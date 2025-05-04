@@ -88,6 +88,10 @@
       const [isLoaded, setIsLoaded] = React.useState(false);
       const [selectedDate, setSelectedDate] = React.useState('2025-05-03');
 
+      // Debounce state for button clicks
+      const [lastClickTime, setLastClickTime] = React.useState(0);
+      const DEBOUNCE_TIME = 300; // 300ms debounce
+
       React.useEffect(() => {
         console.log('App mounted, checking CDNs...');
         if (!window.React || !window.ReactDOM || !window.Babel || !window.XLSX) {
@@ -104,7 +108,15 @@
         console.log('ShowLogin state changed:', showLogin, 'LoginRole:', loginRole);
       }, [showLogin, loginRole]);
 
-      const handleRoleSelection = (role) => {
+      const handleRoleSelection = (role, event) => {
+        event.stopPropagation(); // Prevent event bubbling
+        const now = Date.now();
+        if (now - lastClickTime < DEBOUNCE_TIME) {
+          console.log('Debounced click, ignoring');
+          return;
+        }
+        setLastClickTime(now);
+
         console.log('Role selected:', role);
         if (role === 'volunteer') {
           console.log('Setting userRole to volunteer');
@@ -569,6 +581,7 @@
           mode: 'cors'
         })
         .then(response => {
+          console.log('Fetch response status:', response.status);
           if (!response.ok) throw new Error('Network response was not ok: ' + response.status);
           return response.json();
         })
@@ -604,6 +617,7 @@
           mode: 'cors'
         })
         .then(response => {
+          console.log('Fetch response status:', response.status);
           if (!response.ok) throw new Error('Network response was not ok: ' + response.status);
           return response.json();
         })
@@ -654,6 +668,7 @@
           mode: 'cors'
         })
         .then(response => {
+          console.log('Fetch response status:', response.status);
           if (!response.ok) throw new Error('Network response was not ok: ' + response.status);
           return response.json();
         })
@@ -714,19 +729,19 @@
               <h2 className="text-2xl font-semibold mb-4 text-gray-800">Select Your Role</h2>
               <div className="space-y-4">
                 <button
-                  onClick={() => handleRoleSelection('volunteer')}
+                  onClick={(e) => handleRoleSelection('volunteer', e)}
                   className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   Volunteer
                 </button>
                 <button
-                  onClick={() => handleRoleSelection('coordinator')}
+                  onClick={(e) => handleRoleSelection('coordinator', e)}
                   className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
                 >
                   Coordinator/Parish Staff
                 </button>
                 <button
-                  onClick={() => handleRoleSelection('admin')}
+                  onClick={(e) => handleRoleSelection('admin', e)}
                   className="w-full bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
                 >
                   Admin
@@ -982,11 +997,11 @@
         throw new Error('One or more required libraries (React, ReactDOM, Babel, or XLSX) failed to load.');
       }
       console.log('Rendering React app...');
-      ReactDOM.render(
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(
         <ErrorBoundary>
           <App />
-        </ErrorBoundary>,
-        document.getElementById('root')
+        </ErrorBoundary>
       );
       console.log('React app rendered');
     } catch (err) {
