@@ -4,11 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Church Volunteer Scheduler</title>
-  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.15/Babel.min.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js" onerror="console.error('Failed to load React from cdn.jsdelivr.net'); document.getElementById('root').innerHTML = '<div class=\"text-center text-red-500\">Failed to load React. Please check your internet connection and try again.</div>'"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js" onerror="console.error('Failed to load ReactDOM from cdn.jsdelivr.net'); document.getElementById('root').innerHTML = '<div class=\"text-center text-red-500\">Failed to load ReactDOM. Please check your internet connection and try again.</div>'"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.15/babel.min.js" onerror="this.onerror=null; this.src='https://unpkg.com/@babel/standalone@7.20.15/babel.min.js'; console.error('Failed to load Babel from cdn.jsdelivr.net, trying unpkg.com')"></script>
+  <script src="https://cdn.tailwindcss.com" onerror="console.error('Failed to load Tailwind CSS from cdn.tailwindcss.com')"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" onerror="console.error('Failed to load XLSX from cdn.jsdelivr.net'); document.getElementById('root').innerHTML = '<div class=\"text-center text-red-500\">Failed to load XLSX library. Please check your internet connection and try again.</div>'"></script>
 </head>
 <body>
   <div id="root" class="container mx-auto p-4">
@@ -32,15 +32,32 @@
 
       React.useEffect(() => {
         console.log('App mounted, checking CDNs...');
-        if (!window.React || !window.ReactDOM || !window.Babel || !window.XLSX) {
-          console.error('CDN load failure');
-          setError('Failed to load required libraries (React, ReactDOM, Babel, or XLSX). Check your internet connection and console for details.');
+        if (!window.React) {
+          console.error('React not loaded');
+          setError('React failed to load. Please check your internet connection and console for details.');
+          setIsLoaded(true);
+          return;
+        }
+        if (!window.ReactDOM) {
+          console.error('ReactDOM not loaded');
+          setError('ReactDOM failed to load. Please check your internet connection and console for details.');
+          setIsLoaded(true);
+          return;
+        }
+        if (!window.Babel) {
+          console.error('Babel not loaded');
+          setError('Babel failed to load. Please check your internet connection and console for details.');
+          setIsLoaded(true);
+          return;
+        }
+        if (!window.XLSX) {
+          console.error('XLSX not loaded');
+          setError('XLSX library failed to load. Please check your internet connection and console for details.');
           setIsLoaded(true);
           return;
         }
         console.log('CDNs loaded, testing backend connection...');
 
-        // Timeout to ensure loading state doesn't persist indefinitely
         const timeout = setTimeout(() => {
           if (!isLoaded) {
             console.log('Backend connection timed out');
@@ -49,7 +66,7 @@
             setIsBackendConnected(false);
             setIsLoaded(true);
           }
-        }, 10000); // 10 seconds timeout
+        }, 10000);
 
         testConnection();
         return () => clearTimeout(timeout);
@@ -90,7 +107,7 @@
         })
         .finally(() => {
           console.log('Fetch completed, ensuring UI update with isLoaded:', isLoaded);
-          if (!isLoaded) setIsLoaded(true); // Force UI update
+          if (!isLoaded) setIsLoaded(true);
         });
       };
 
@@ -348,8 +365,9 @@
     }
 
     try {
-      if (!window.React || !window.ReactDOM || !window.Babel) {
-        throw new Error('Required libraries (React, ReactDOM, or Babel) failed to load.');
+      console.log('Checking CDN availability...');
+      if (!window.React || !window.ReactDOM || !window.Babel || !window.XLSX) {
+        throw new Error('One or more required libraries (React, ReactDOM, Babel, or XLSX) failed to load.');
       }
       console.log('Rendering React app...');
       ReactDOM.render(<App />, document.getElementById('root'));
