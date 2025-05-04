@@ -131,7 +131,7 @@
         const { volunteer, role, mass } = absence;
         const date = new Date().toISOString().split('T')[0];
         const group = schedule.filter(item => item.role === role);
-        const scriptURL = 'YOUR_GOOGLE_APPS_SCRIPT_URL';
+        const scriptURL = 'https://script.google.com/macros/s/AKfycbyLRwB-iapOUm4Yi5iCOOjnF6aDC6P3WfQwasFAf8LW9yAuy8sp9y0jtu5TSwVUb0XL7Q/exec';
         fetch(scriptURL, {
           method: 'POST',
           body: JSON.stringify({ action: 'sendAbsence', volunteer, role, mass, date, group }),
