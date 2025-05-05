@@ -35,7 +35,7 @@
       '9:00 AM Sunday Mass',
       '11:00 AM Sunday Mass'
     ];
-    const scriptURL = 'https://script.google.com/macros/s/AKfycbzzin7wIN8oYPtJ2SXiL-xOuAz_-bTQqkACQEsNaY8klWxC2gv3H1bPETq75bTThN1SOg/exec';
+    const scriptURL = 'https://script.google.com/macros/s/AKfycbx_TphgchMjxEArGV0TVEfEypqCBCLVZeapFHE-AYI7bVFJVzUIQDPcC6TUEubszQhU8w/exec';
     const COORDINATOR_PASSWORD = 'coord123';
     const ADMIN_PASSWORD = 'stpaulsdev3';
 
@@ -125,6 +125,14 @@
       const [newVolunteer, setNewVolunteer] = React.useState({ name: '', email: '', phone: '', role: 'Sacristan' });
       const [volunteerToRemove, setVolunteerToRemove] = React.useState({ name: '', role: 'Sacristan' });
 
+      // State for pickup shift
+      const [pickupDate, setPickupDate] = React.useState('2025-05-03');
+      const [pickupMass, setPickupMass] = React.useState('');
+      const [pickupRole, setPickupRole] = React.useState('');
+      const [pickupVolunteerName, setPickupVolunteerName] = React.useState('');
+      const [pickupVolunteerEmail, setPickupVolunteerEmail] = React.useState('');
+      const [availableShifts, setAvailableShifts] = React.useState([]);
+
       // Debounce state for button clicks and input updates
       const [lastClickTime, setLastClickTime] = React.useState(0);
       const DEBOUNCE_TIME = 100;
@@ -203,6 +211,7 @@
         setPasswordInput('');
         setError(null);
         setSchedules([]);
+        setAvailableShifts([]);
       };
 
       const testConnection = () => {
@@ -413,6 +422,87 @@
 
         setVolunteerToRemove({ name: '', role: 'Sacristan' });
         setError(null);
+      };
+
+      const fetchAvailableShifts = (date) => {
+        fetch(`${scriptURL}?action=fetchAbsences`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            const available = data.absences.filter(absence => 
+              absence.date === date && 
+              absence.status === 'open'
+            );
+            setAvailableShifts(available);
+            console.log('Fetched available shifts:', available);
+          } else {
+            setError('Failed to fetch available shifts: ' + (data.error || 'Unknown error'));
+            setAvailableShifts([]);
+          }
+        })
+        .catch(error => {
+          console.error('Fetch available shifts error:', error.message, error.stack);
+          setError('Error fetching available shifts: ' + error.message);
+          setAvailableShifts([]);
+        });
+      };
+
+      const handlePickupDateChange = (e) => {
+        const selectedDate = e.target.value;
+        setPickupDate(selectedDate);
+        setPickupMass('');
+        setPickupRole('');
+        fetchAvailableShifts(selectedDate);
+      };
+
+      const handlePickupMassChange = (e) => {
+        const selectedMass = e.target.value;
+        setPickupMass(selectedMass);
+        setPickupRole('');
+      };
+
+      const handlePickupShift = () => {
+        if (!pickupVolunteerName || !pickupVolunteerEmail) {
+          setError('Please provide your name and email to pick up a shift.');
+          return;
+        }
+        if (!pickupDate || !pickupMass || !pickupRole) {
+          setError('Please select a date, mass, and role to pick up a shift.');
+          return;
+        }
+
+        const pickupData = {
+          action: 'pickupShift',
+          volunteer: pickupVolunteerName,
+          email: pickupVolunteerEmail,
+          role: pickupRole,
+          mass: pickupMass,
+          date: pickupDate
+        };
+
+        fetch(scriptURL, {
+          method: 'POST',
+          body: JSON.stringify(pickupData),
+          headers: { 'Content-Type': 'application/json' },
+          mode: 'no-cors'
+        })
+        .then(response => {
+          console.log('Shift pickup request sent (no-cors mode, response not readable)');
+          alert(`Shift picked up for ${pickupRole} at ${pickupMass} on ${pickupDate}. Notifications sent to other volunteers (check Google Apps Script logs).`);
+          setPickupMass('');
+          setPickupRole('');
+          setPickupVolunteerName('');
+          setPickupVolunteerEmail('');
+          fetchAvailableShifts(pickupDate);
+          setError(null);
+        })
+        .catch(error => {
+          console.error('Shift pickup error:', error.message, error.stack);
+          setError('Error picking up shift: ' + error.message + '. Check the Google Apps Script logs.');
+        });
       };
 
       console.log('Rendering UI, isLoaded:', isLoaded);
@@ -815,6 +905,86 @@
                 Report Absence
               </button>
             </form>
+          </div>
+
+          {/* Pickup Shift Section (All Roles) */}
+          <div className="bg-white p-6 rounded-lg shadow-lg hover-scale">
+            <h2 className="text-2xl font-semibold mb-4 text-gray-800">Pickup Shift</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Select Date</label>
+                <input
+                  type="date"
+                  value={pickupDate}
+                  onChange={handlePickupDateChange}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  min="2025-01-01"
+                  max="2025-12-31"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Mass</label>
+                <select
+                  value={pickupMass}
+                  onChange={handlePickupMassChange}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  disabled={!pickupDate}
+                >
+                  <option value="" disabled>Select Mass</option>
+                  {[...new Set(availableShifts.map(shift => shift.mass))].map(mass => (
+                    <option key={mass} value={mass}>{mass}</option>
+                  ))}
+                </select>
+                {!pickupDate && (
+                  <p className="text-sm text-gray-500 mt-1">Please select a date first to see available masses.</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Role</label>
+                <select
+                  value={pickupRole}
+                  onChange={(e) => setPickupRole(e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  disabled={!pickupMass}
+                >
+                  <option value="" disabled>Select Role</option>
+                  {availableShifts
+                    .filter(shift => shift.mass === pickupMass)
+                    .map(shift => (
+                      <option key={shift.role} value={shift.role}>{shift.role} (Previously: {shift.volunteer})</option>
+                    ))}
+                </select>
+                {!pickupMass && (
+                  <p className="text-sm text-gray-500 mt-1">Please select a mass first to see available roles.</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Your Name</label>
+                <input
+                  type="text"
+                  value={pickupVolunteerName}
+                  onChange={(e) => setPickupVolunteerName(e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter your name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Your Email</label>
+                <input
+                  type="email"
+                  value={pickupVolunteerEmail}
+                  onChange={(e) => setPickupVolunteerEmail(e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter your email"
+                />
+              </div>
+              <button
+                onClick={handlePickupShift}
+                className="bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Pick Up Shift
+              </button>
+            </div>
           </div>
         </div>
       );
