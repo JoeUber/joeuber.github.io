@@ -117,6 +117,7 @@
       // State for viewing schedules and reporting absences
       const [viewDate, setViewDate] = React.useState('2025-05-03');
       const [schedules, setSchedules] = React.useState([]);
+      const [absences, setAbsences] = React.useState([]); // New state for absences
       const [absence, setAbsence] = React.useState({ date: '2025-05-03', mass: '', volunteer: '' });
       const [filteredVolunteersForAbsence, setFilteredVolunteersForAbsence] = React.useState([]);
 
@@ -211,6 +212,7 @@
         setPasswordInput('');
         setError(null);
         setSchedules([]);
+        setAbsences([]);
         setAvailableShifts([]);
       };
 
@@ -374,6 +376,12 @@
           volunteerList: volunteerLists // Include the full volunteer list
         };
 
+        // Store the absence locally
+        setAbsences(prev => [
+          ...prev,
+          { date, mass, role, volunteer, status: 'open' }
+        ]);
+
         fetch(scriptURL, {
           method: 'POST',
           body: JSON.stringify(absenceData),
@@ -426,29 +434,13 @@
       };
 
       const fetchAvailableShifts = (date) => {
-        fetch(`${scriptURL}?action=fetchAbsences`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
-        })
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            const available = data.absences.filter(absence => 
-              absence.date === date && 
-              absence.status === 'open'
-            );
-            setAvailableShifts(available);
-            console.log('Fetched available shifts:', available);
-          } else {
-            setError('Failed to fetch available shifts: ' + (data.error || 'Unknown error'));
-            setAvailableShifts([]);
-          }
-        })
-        .catch(error => {
-          console.error('Fetch available shifts error:', error.message, error.stack);
-          setError('Error fetching available shifts: ' + error.message);
-          setAvailableShifts([]);
-        });
+        // Filter absences from local state instead of fetching from backend
+        const available = absences.filter(absence => 
+          absence.date === date && 
+          absence.status === 'open'
+        );
+        setAvailableShifts(available);
+        console.log('Fetched available shifts from local state:', available);
       };
 
       const handlePickupDateChange = (e) => {
@@ -483,6 +475,43 @@
           mass: pickupMass,
           date: pickupDate
         };
+
+        // Update local absences state
+        setAbsences(prev => prev.map(absence => 
+          absence.date === pickupDate && 
+          absence.mass === pickupMass && 
+          absence.role === pickupRole && 
+          absence.status === 'open'
+            ? { ...absence, status: 'picked', pickedBy: pickupVolunteerName }
+            : absence
+        ));
+
+        // Update local schedules state
+        setSchedules(prev => prev.map(schedule => {
+          if (schedule.date === pickupDate && schedule.mass === pickupMass) {
+            const updatedAssignments = schedule.assignments.map(assignment => {
+              if (assignment.role === pickupRole) {
+                // Replace the absent volunteer with the new volunteer
+                const absentVolunteer = absences.find(absence => 
+                  absence.date === pickupDate && 
+                  absence.mass === pickupMass && 
+                  absence.role === pickupRole
+                )?.volunteer;
+                return {
+                  ...assignment,
+                  volunteers: assignment.volunteers.map(volunteer => 
+                    volunteer.name === absentVolunteer 
+                      ? { name: pickupVolunteerName, email: pickupVolunteerEmail }
+                      : volunteer
+                  )
+                };
+              }
+              return assignment;
+            });
+            return { ...schedule, assignments: updatedAssignments };
+          }
+          return schedule;
+        }));
 
         fetch(scriptURL, {
           method: 'POST',
@@ -931,7 +960,7 @@
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
                   disabled={!pickupDate}
                 >
- |                  <option value="" disabled>Select Mass</option>
+                  <option value="" disabled>Select Mass</option>
                   {[...new Set(availableShifts.map(shift => shift.mass))].map(mass => (
                     <option key={mass} value={mass}>{mass}</option>
                   ))}
