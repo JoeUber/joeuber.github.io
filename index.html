@@ -35,7 +35,7 @@
       '9:00 AM Sunday Mass',
       '11:00 AM Sunday Mass'
     ];
-    const scriptURL = 'https://script.google.com/macros/s/AKfycbx_TphgchMjxEArGV0TVEfEypqCBCLVZeapFHE-AYI7bVFJVzUIQDPcC6TUEubszQhU8w/exec';
+    const scriptURL = 'https://script.google.com/macros/s/AKfycbw5wrTur6UiZLahxiTqwLtlMmx8c3odJT5gel261jXxOS9yTFN-QLi1a3o_vAo1JG0bjA/exec';
     const COORDINATOR_PASSWORD = 'coord123';
     const ADMIN_PASSWORD = 'stpaulsdev3';
 
@@ -370,7 +370,8 @@
           volunteer: volunteer,
           role: role,
           mass: mass,
-          date: date
+          date: date,
+          volunteerList: volunteerLists // Include the full volunteer list
         };
 
         fetch(scriptURL, {
@@ -381,7 +382,7 @@
         })
         .then(response => {
           console.log('Absence report sent (no-cors mode, response not readable)');
-          alert(`Absence reported for ${volunteer} (${role}) at ${mass} on ${date}. Notifications sent to other volunteers (check Google Apps Script logs).`);
+          alert(`Absence reported for ${volunteer} (${role}) at ${mass} on ${date}. Notifications sent to all volunteers (check Google Apps Script logs).`);
           setAbsence({ date: '2025-05-03', mass: '', volunteer: '' });
           setFilteredVolunteersForAbsence([]);
           setError(null);
@@ -930,7 +931,7 @@
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
                   disabled={!pickupDate}
                 >
-                  <option value="" disabled>Select Mass</option>
+ |                  <option value="" disabled>Select Mass</option>
                   {[...new Set(availableShifts.map(shift => shift.mass))].map(mass => (
                     <option key={mass} value={mass}>{mass}</option>
                   ))}
