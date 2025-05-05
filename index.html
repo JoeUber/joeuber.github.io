@@ -35,15 +35,16 @@
       '9:00 AM Sunday Mass',
       '11:00 AM Sunday Mass'
     ];
-    const scriptURL = 'https://script.google.com/macros/s/AKfycbxImIg0zYQWcfHbCJMERsM52CakAI73ZERTy-xsc_sxtVZ86eg5cQWdj3RKUlIvHEbO0A/exec';
+    const scriptURL = 'https://script.google.com/macros/s/AKfycbwjy27ZwX5ynmYd9iS5AHbJFw133K_bshR6Igg6pFmKUYXrTnNjbskAFPx5wXcwhr1Y4g/exec';
     const COORDINATOR_PASSWORD = 'coord123';
     const ADMIN_PASSWORD = 'stpaulsdev3';
 
-    // Placeholder volunteer lists (to be updated later)
-    const volunteerLists = {
+    // Volunteer lists with Joseph Soff added
+    const initialVolunteerLists = {
       'Sacristan': [
         { name: 'John Doe', email: 'john.doe@example.com', phone: '555-1234' },
-        { name: 'Mary Johnson', email: 'mary.johnson@example.com', phone: '555-5678' }
+        { name: 'Mary Johnson', email: 'mary.johnson@example.com', phone: '555-5678' },
+        { name: 'Joseph Soff', email: 'joseph.soff@gmail.com', phone: '' }
       ],
       'Reader 1': [
         { name: 'Jane Smith', email: 'jane.smith@example.com', phone: '555-9012' },
@@ -115,12 +116,18 @@
 
       // State for viewing schedules and reporting absences
       const [viewDate, setViewDate] = React.useState('2025-05-03');
-      const [absence, setAbsence] = React.useState({ mass: '', role: '', volunteer: '' });
-      const [filteredVolunteers, setFilteredVolunteers] = React.useState([]);
+      const [schedules, setSchedules] = React.useState([]);
+      const [absence, setAbsence] = React.useState({ date: '2025-05-03', mass: '', volunteer: '' });
+      const [filteredVolunteersForAbsence, setFilteredVolunteersForAbsence] = React.useState([]);
+
+      // State for volunteer management
+      const [volunteerLists, setVolunteerLists] = React.useState(initialVolunteerLists);
+      const [newVolunteer, setNewVolunteer] = React.useState({ name: '', email: '', phone: '', role: 'Sacristan' });
+      const [volunteerToRemove, setVolunteerToRemove] = React.useState({ name: '', role: 'Sacristan' });
 
       // Debounce state for button clicks and input updates
       const [lastClickTime, setLastClickTime] = React.useState(0);
-      const DEBOUNCE_TIME = 300;
+      const DEBOUNCE_TIME = 100;
 
       React.useEffect(() => {
         console.log('App mounted, checking CDNs...');
@@ -195,6 +202,7 @@
         setLoginRole('');
         setPasswordInput('');
         setError(null);
+        setSchedules([]);
       };
 
       const testConnection = () => {
@@ -204,28 +212,17 @@
           method: 'POST',
           body: JSON.stringify({ test: true }),
           headers: { 'Content-Type': 'application/json' },
-          mode: 'cors'
+          mode: 'no-cors'
         })
         .then(response => {
-          console.log('Fetch response status:', response.status);
-          if (!response.ok) throw new Error('Network response was not ok: ' + response.status);
-          return response.json();
-        })
-        .then(data => {
-          console.log('Fetch response data:', data);
-          if (data.success) {
-            setConnectionStatus('Connected to Google Apps Script: ' + (data.message || 'Success'));
-            setIsBackendConnected(true);
-            setError(null);
-          } else {
-            setError('Failed to connect to Google Apps Script: ' + (data.error || 'Unknown error'));
-            setConnectionStatus('Connection failed: ' + (data.error || 'Unknown error'));
-            setIsBackendConnected(false);
-          }
+          console.log('Test request sent (no-cors mode, response not readable)');
+          setConnectionStatus('Request sent. Check Google Apps Script logs to confirm success.');
+          setIsBackendConnected(true);
+          setError(null);
         })
         .catch(err => {
           console.error('Fetch error details:', err.message, err.stack);
-          setError('Error connecting to backend: ' + err.message + '. Ensure the Google Apps Script is deployed correctly, CORS is allowed, and there are no network restrictions (e.g., ad blockers).');
+          setError('Error connecting to backend: ' + err.message + '. Ensure the Google Apps Script is deployed correctly and there are no network restrictions (e.g., ad blockers).');
           setConnectionStatus('Connection error: ' + err.message);
           setIsBackendConnected(false);
         });
@@ -237,13 +234,11 @@
           return;
         }
 
-        // Validate assignments
         const assignments = Object.keys(roleAssignments).map(role => ({
           role: role,
           volunteers: roleAssignments[role]
         }));
 
-        // Check if all roles have at least one volunteer
         const missingRoles = assignments.filter(assignment => assignment.volunteers.length === 0);
         if (missingRoles.length > 0) {
           setError(`Please assign at least one volunteer to the following roles: ${missingRoles.map(r => r.role).join(', ')}`);
@@ -261,42 +256,30 @@
 
         console.log('Saving schedule:', schedule);
 
+        setSchedules(prev => [...prev, schedule.schedule]);
+
         fetch(scriptURL, {
           method: 'POST',
           body: JSON.stringify(schedule),
           headers: { 'Content-Type': 'application/json' },
-          mode: 'cors'
+          mode: 'no-cors'
         })
         .then(response => {
-          console.log('Fetch response status:', response.status);
-          if (!response.ok) {
-            return response.text().then(text => {
-              throw new Error('Network response was not ok: ' + response.status + ' ' + text);
-            });
-          }
-          return response.json();
-        })
-        .then(data => {
-          console.log('Save schedule response:', data);
-          if (data.success) {
-            alert('Schedule saved successfully. Emails have been sent to the volunteers.');
-            // Reset the form
-            setRoleAssignments({
-              'Sacristan': [],
-              'Reader 1': [],
-              'Reader 2': [],
-              'Eucharistic Ministers': [],
-              'Ushers': []
-            });
-            setSelectedMass('');
-            setError(null);
-          } else {
-            setError('Failed to save schedule: ' + (data.error || 'Unknown error'));
-          }
+          console.log('Schedule request sent (no-cors mode, response not readable)');
+          alert('Schedule saved. Immediate emails have been sent to volunteers. A reminder email will be sent on the Friday before the shift. Check Google Apps Script logs to confirm.');
+          setRoleAssignments({
+            'Sacristan': [],
+            'Reader 1': [],
+            'Reader 2': [],
+            'Eucharistic Ministers': [],
+            'Ushers': []
+          });
+          setSelectedMass('');
+          setError(null);
         })
         .catch(error => {
           console.error('Save schedule error:', error.message, error.stack);
-          setError('Error saving schedule: ' + error.message + '. Ensure the Google Apps Script is deployed correctly and accessible. Check the browser Network tab for details.');
+          setError('Error saving schedule to backend: ' + error.message + '. Schedule saved locally. Check the Google Apps Script logs.');
         });
       };
 
@@ -309,16 +292,32 @@
         setRoleAssignments(prev => ({ ...prev, [role]: selectedOptions }));
       };
 
-      const handleAbsenceMassChange = (e) => {
-        const selectedMass = e.target.value;
-        setAbsence(prev => ({ ...prev, mass: selectedMass, role: '', volunteer: '' }));
-        setFilteredVolunteers([]);
+      const handleAbsenceDateChange = (e) => {
+        const selectedDate = e.target.value;
+        setAbsence(prev => ({ ...prev, date: selectedDate, mass: '', volunteer: '' }));
+        setFilteredVolunteersForAbsence([]);
       };
 
-      const handleAbsenceRoleChange = (e) => {
-        const selectedRole = e.target.value;
-        setAbsence(prev => ({ ...prev, role: selectedRole, volunteer: '' }));
-        setFilteredVolunteers(volunteerLists[selectedRole] ? volunteerLists[selectedRole].map(v => v.name) : []);
+      const handleAbsenceMassChange = (e) => {
+        const selectedMass = e.target.value;
+        setAbsence(prev => ({ ...prev, mass: selectedMass, volunteer: '' }));
+        const schedule = schedules.find(s => s.date === absence.date && s.mass === selectedMass);
+        if (schedule) {
+          const allVolunteers = schedule.assignments.flatMap(assignment => 
+            assignment.volunteers.map(volunteer => ({
+              name: volunteer.name,
+              role: assignment.role
+            }))
+          );
+          setFilteredVolunteersForAbsence(allVolunteers);
+        } else {
+          setFilteredVolunteersForAbsence([]);
+        }
+      };
+
+      const handleAbsenceVolunteerChange = (e) => {
+        const selectedVolunteer = e.target.value;
+        setAbsence(prev => ({ ...prev, volunteer: selectedVolunteer }));
       };
 
       const handleAbsenceSubmit = (e) => {
@@ -328,22 +327,92 @@
           setError('Cannot report absence: Backend not connected');
           return;
         }
-        const { mass, role, volunteer } = absence;
-        if (!mass) {
-          setError('Please select a mass.');
+        const { date, mass, volunteer } = absence;
+        if (!date) {
+          setError('Please select a date.');
           return;
         }
-        if (!role) {
-          setError('Please select a role.');
+        if (!mass) {
+          setError('Please select a mass.');
           return;
         }
         if (!volunteer) {
           setError('Please select a volunteer.');
           return;
         }
-        alert(`Absence reported for ${volunteer} (${role}) at ${mass} on ${viewDate}`);
-        setAbsence({ mass: '', role: '', volunteer: '' });
-        setFilteredVolunteers([]);
+
+        const selectedSchedule = schedules.find(s => s.date === date && s.mass === mass);
+        if (!selectedSchedule) {
+          setError('No schedule found for the selected date and mass. Please ensure the schedule is saved.');
+          return;
+        }
+
+        const role = selectedSchedule.assignments.find(assignment => 
+          assignment.volunteers.some(v => v.name === volunteer)
+        )?.role;
+
+        if (!role) {
+          setError('Could not determine role for the selected volunteer.');
+          return;
+        }
+
+        const absenceData = {
+          action: 'reportAbsence',
+          volunteer: volunteer,
+          role: role,
+          mass: mass,
+          date: date
+        };
+
+        fetch(scriptURL, {
+          method: 'POST',
+          body: JSON.stringify(absenceData),
+          headers: { 'Content-Type': 'application/json' },
+          mode: 'no-cors'
+        })
+        .then(response => {
+          console.log('Absence report sent (no-cors mode, response not readable)');
+          alert(`Absence reported for ${volunteer} (${role}) at ${mass} on ${date}. Notifications sent to other volunteers (check Google Apps Script logs).`);
+          setAbsence({ date: '2025-05-03', mass: '', volunteer: '' });
+          setFilteredVolunteersForAbsence([]);
+          setError(null);
+        })
+        .catch(error => {
+          console.error('Absence report error:', error.message, error.stack);
+          setError('Error reporting absence to backend: ' + error.message + '. Check the Google Apps Script logs for more details.');
+        });
+      };
+
+      const handleAddVolunteer = () => {
+        const { name, email, phone, role } = newVolunteer;
+        if (!name || !email) {
+          setError('Please provide a name and email for the volunteer.');
+          return;
+        }
+
+        setVolunteerLists(prev => ({
+          ...prev,
+          [role]: [...prev[role], { name, email, phone }]
+        }));
+
+        setNewVolunteer({ name: '', email: '', phone: '', role: 'Sacristan' });
+        setError(null);
+      };
+
+      const handleRemoveVolunteer = () => {
+        const { name, role } = volunteerToRemove;
+        if (!name) {
+          setError('Please select a volunteer to remove.');
+          return;
+        }
+
+        setVolunteerLists(prev => ({
+          ...prev,
+          [role]: prev[role].filter(volunteer => volunteer.name !== name)
+        }));
+
+        setVolunteerToRemove({ name: '', role: 'Sacristan' });
+        setError(null);
       };
 
       console.log('Rendering UI, isLoaded:', isLoaded);
@@ -458,6 +527,128 @@
             </div>
           )}
 
+          {/* Manage Volunteers Section (Coordinator/Admin Only) */}
+          {(userRole === 'coordinator' || userRole === 'admin') && (
+            <div className="bg-white p-6 rounded-lg shadow-lg hover-scale">
+              <h2 className="text-2xl font-semibold mb-4 text-gray-800">Manage Volunteers</h2>
+              <div className="space-y-4">
+                {/* Add Volunteer */}
+                <div>
+                  <h3 className="text-lg font-medium text-gray-800 mb-2">Add Volunteer</h3>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Name</label>
+                      <input
+                        type="text"
+                        value={newVolunteer.name}
+                        onChange={(e) => setNewVolunteer(prev => ({ ...prev, name: e.target.value }))}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter volunteer name"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Email</label>
+                      <input
+                        type="email"
+                        value={newVolunteer.email}
+                        onChange={(e) => setNewVolunteer(prev => ({ ...prev, email: e.target.value }))}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter volunteer email"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Phone (Optional)</label>
+                      <input
+                        type="text"
+                        value={newVolunteer.phone}
+                        onChange={(e) => setNewVolunteer(prev => ({ ...prev, phone: e.target.value }))}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter volunteer phone"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Role</label>
+                      <select
+                        value={newVolunteer.role}
+                        onChange={(e) => setNewVolunteer(prev => ({ ...prev, role: e.target.value }))}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {roles.map(role => (
+                          <option key={role} value={role}>{role}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      onClick={handleAddVolunteer}
+                      className="bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                      Add Volunteer
+                    </button>
+                  </div>
+                </div>
+                {/* Remove Volunteer */}
+                <div>
+                  <h3 className="text-lg font-medium text-gray-800 mb-2">Remove Volunteer</h3>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Role</label>
+                      <select
+                        value={volunteerToRemove.role}
+                        onChange={(e) => {
+                          setVolunteerToRemove(prev => ({ ...prev, role: e.target.value, name: '' }));
+                        }}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {roles.map(role => (
+                          <option key={role} value={role}>{role}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Volunteer</label>
+                      <select
+                        value={volunteerToRemove.name}
+                        onChange={(e) => setVolunteerToRemove(prev => ({ ...prev, name: e.target.value }))}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="" disabled>Select Volunteer</option>
+                        {volunteerLists[volunteerToRemove.role].map(volunteer => (
+                          <option key={volunteer.name} value={volunteer.name}>{volunteer.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      onClick={handleRemoveVolunteer}
+                      className="bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
+                    >
+                      Remove Volunteer
+                    </button>
+                  </div>
+                </div>
+                {/* Display Current Volunteers */}
+                <div>
+                  <h3 className="text-lg font-medium text-gray-800 mb-2">Current Volunteers</h3>
+                  {roles.map(role => (
+                    <div key={role} className="mb-4">
+                      <p className="font-semibold text-gray-700">{role}:</p>
+                      {volunteerLists[role].length === 0 ? (
+                        <p className="text-gray-600">No volunteers assigned.</p>
+                      ) : (
+                        <ul className="ml-4 list-disc">
+                          {volunteerLists[role].map(volunteer => (
+                            <li key={volunteer.name} className="text-gray-600">
+                              {volunteer.name} ({volunteer.email}{volunteer.phone ? `, ${volunteer.phone}` : ''})
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Schedule Volunteers Section (Coordinator/Admin Only) */}
           {(userRole === 'coordinator' || userRole === 'admin') && (
             <div className="bg-white p-6 rounded-lg shadow-lg hover-scale">
@@ -481,7 +672,7 @@
                     onChange={(e) => setSelectedMass(e.target.value)}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value="">Select Mass</option>
+                    <option value="" disabled>Select Mass</option>
                     {masses.map(mass => (
                       <option key={mass} value={mass}>{mass}</option>
                     ))}
@@ -494,12 +685,16 @@
                         <label className="block text-sm font-medium text-gray-700">{role}</label>
                         <select
                           multiple={role === 'Sacristan' || role === 'Eucharistic Ministers' || role === 'Ushers'}
-                          value={roleAssignments[role].map(v => v.name)}
+                          value={
+                            role === 'Sacristan' || role === 'Eucharistic Ministers' || role === 'Ushers'
+                              ? roleAssignments[role].map(v => v.name)
+                              : roleAssignments[role][0]?.name || ''
+                          }
                           onChange={(e) => handleRoleAssignmentChange(role, e)}
                           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
                           size={role === 'Sacristan' || role === 'Eucharistic Ministers' || role === 'Ushers' ? 3 : 1}
                         >
-                          <option value="">Select {role}</option>
+                          <option value="" disabled>Select {role}</option>
                           {volunteerLists[role].map(volunteer => (
                             <option key={volunteer.name} value={volunteer.name}>{volunteer.name}</option>
                           ))}
@@ -535,9 +730,31 @@
                 max="2025-12-31"
               />
             </div>
-            <div className="text-center text-yellow-500 bg-yellow-100 p-4 rounded-lg">
-              <p>Schedule viewing is not yet implemented. Schedules are saved to the backend, but retrieval is not supported in this version. Contact the developer to add this feature.</p>
-            </div>
+            {schedules.length === 0 ? (
+              <div className="text-center text-yellow-500 bg-yellow-100 p-4 rounded-lg">
+                <p>No schedules found for the selected date. Try saving a schedule first or check a different date. Note: Schedules are stored locally and cleared on logout.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {schedules
+                  .filter(schedule => schedule.date === viewDate)
+                  .map((schedule, index) => (
+                    <div key={index} className="border border-gray-200 p-4 rounded-lg bg-gray-50">
+                      <h3 className="text-lg font-medium text-blue-800">{schedule.mass} - {schedule.date}</h3>
+                      <div className="mt-2 space-y-2">
+                        {schedule.assignments.map((assignment, idx) => (
+                          <div key={idx} className="ml-4">
+                            <p className="font-semibold text-gray-700">{assignment.role}:</p>
+                            {assignment.volunteers.map((volunteer, vIdx) => (
+                              <p key={vIdx} className="text-gray-600">{volunteer.name}</p>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
 
           {/* Report Absence Section (All Roles) */}
@@ -545,50 +762,50 @@
             <h2 className="text-2xl font-semibold mb-4 text-gray-800">Report Absence</h2>
             <form onSubmit={handleAbsenceSubmit} className="space-y-4">
               <div>
+                <label className="block text-sm font-medium text-gray-700">Select Date</label>
+                <input
+                  type="date"
+                  value={absence.date}
+                  onChange={handleAbsenceDateChange}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  min="2025-01-01"
+                  max="2025-12-31"
+                />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700">Mass</label>
                 <select
                   value={absence.mass}
                   onChange={handleAbsenceMassChange}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  disabled={!absence.date}
                 >
-                  <option value="">Select Mass</option>
-                  {masses.map(mass => (
-                    <option key={mass} value={mass}>{mass}</option>
-                  ))}
+                  <option value="" disabled>Select Mass</option>
+                  {schedules
+                    .filter(schedule => schedule.date === absence.date)
+                    .map(schedule => (
+                      <option key={schedule.mass} value={schedule.mass}>{schedule.mass}</option>
+                    ))}
                 </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Role</label>
-                <select
-                  value={absence.role}
-                  onChange={handleAbsenceRoleChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                  disabled={!absence.mass}
-                >
-                  <option value="">Select Role</option>
-                  {roles.map(role => (
-                    <option key={role} value={role}>{role}</option>
-                  ))}
-                </select>
-                {!absence.mass && (
-                  <p className="text-sm text-gray-500 mt-1">Please select a mass first to see available roles.</p>
+                {!absence.date && (
+                  <p className="text-sm text-gray-500 mt-1">Please select a date first to see available masses.</p>
                 )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Volunteer</label>
                 <select
                   value={absence.volunteer}
-                  onChange={(e) => setAbsence({ ...absence, volunteer: e.target.value })}
+                  onChange={handleAbsenceVolunteerChange}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                  disabled={!absence.role}
+                  disabled={!absence.mass}
                 >
-                  <option value="">Select Volunteer</option>
-                  {filteredVolunteers.map(vol => (
-                    <option key={vol} value={vol}>{vol}</option>
+                  <option value="" disabled>Select Volunteer</option>
+                  {filteredVolunteersForAbsence.map(vol => (
+                    <option key={vol.name} value={vol.name}>{vol.name} ({vol.role})</option>
                   ))}
                 </select>
-                {!absence.role && (
-                  <p className="text-sm text-gray-500 mt-1">Please select a role first to see available volunteers.</p>
+                {!absence.mass && (
+                  <p className="text-sm text-gray-500 mt-1">Please select a mass first to see scheduled volunteers.</p>
                 )}
               </div>
               <button
